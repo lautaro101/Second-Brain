@@ -3,7 +3,7 @@
 Organizador de vida personal (PWA sin frameworks ni build). Núcleo: captura rápida, Inbox, búsqueda, Hoy, revisión semanal, ajustes. Módulos: Notas, Tareas, Hábitos, Diario, Estudio, Programación, Finanzas.
 
 ## Cómo está armado
-- `index.html`: estilos, arranque y carga de módulos (uno por uno: si uno falla, los demás siguen).
+- `index.html`: pantalla de entrada (splash: el logo del ícono que se dibuja, nombre, barra de carga y versión; una vez por apertura según `sessionStorage`, mínimo 2,4 s, tope 3,5 s, se cierra al tocarla, respeta «reducir movimiento» y avisa si `version.js` no llega en 7 s), estilos, arranque y carga de módulos (uno por uno: si uno falla, los demás siguen).
 - `core.js`: núcleo y almacenamiento. No se toca para sumar módulos.
 - `sync.js`: sincronización por archivo (Drive / OneDrive).
 - `seguridad.js`: PIN de acceso, cifrado de archivos (AES-256-GCM con una clave tuya) y recordatorio de copia a los 15 días. El PIN es un candado de pantalla: no cifra lo guardado en el dispositivo. Si se pierde la clave de cifrado, esos archivos no se pueden abrir.

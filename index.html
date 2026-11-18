@@ -90,9 +90,35 @@ details{margin:6px 0}summary{cursor:pointer;color:var(--mut);padding:6px 0}detai
 .tarj{background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 8px;cursor:grab}.tarj.prio{border-left:4px solid var(--bad)}.tarj .acc{display:flex;gap:4px;margin-top:6px}.tarj .acc button{padding:3px 12px}.tarj .acc .x{margin-left:auto}
 @media (min-width:900px){.tablero{overflow:visible}.col{flex:1 1 0;min-width:0}}
 .fila select{width:auto;flex:0 1 auto;max-width:55%;margin:0}
+/* pantalla de entrada */
+#splash{position:fixed;inset:0;z-index:9999;background:#1c3556;color:#f1f5ef;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;transition:opacity .5s ease,visibility .5s}
+#splash.fuera{opacity:0;visibility:hidden}
+#splash svg{width:132px;height:132px;overflow:visible}
+.sp-l{fill:none;stroke:#8fdcb4;stroke-width:10;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;animation:spDraw .6s cubic-bezier(.5,0,.2,1) forwards}
+.sp-d{fill:#8fdcb4;transform-box:fill-box;transform-origin:center;transform:scale(0);animation:spPop .45s cubic-bezier(.3,1.6,.5,1) forwards}
+.sp-d.top{fill:#f1f5ef}
+.sp-n{font:800 2.3rem/1 var(--sans);letter-spacing:-.03em;margin:26px 0 6px;opacity:0;transform:translateY(10px);animation:spUp .6s .7s forwards}
+.sp-t{font:400 .95rem var(--sans);opacity:0;color:#f1f5efc0;animation:spUp .6s .9s forwards}
+.sp-bar{width:128px;height:3px;border-radius:3px;background:#f1f5ef26;overflow:hidden;margin-top:30px;opacity:0;animation:spIn .4s .9s forwards}
+.sp-bar i{display:block;height:100%;width:0;background:#8fdcb4;border-radius:3px;animation:spBar 1.3s 1s cubic-bezier(.4,0,.2,1) forwards}
+.sp-by{position:absolute;left:0;right:0;bottom:max(30px,env(safe-area-inset-bottom));font:500 .78rem var(--sans);letter-spacing:.08em;color:#f1f5efa6;opacity:0;animation:spUp .7s 1.2s forwards}
+.sp-by b{font-weight:700;color:#f1f5ef;letter-spacing:.1em}
+.sp-v{display:block;margin-top:6px;font-weight:500;letter-spacing:.06em;color:#f1f5ef80}
+@keyframes spDraw{to{stroke-dashoffset:0}}@keyframes spIn{to{opacity:1}}@keyframes spPop{to{transform:scale(1)}}@keyframes spUp{to{opacity:1;transform:none}}@keyframes spBar{to{width:100%}}
+@media (prefers-reduced-motion:reduce){#splash *{animation-duration:.01s!important;animation-delay:0s!important}}
 </style>
 </head>
 <body>
+<div id="splash" role="img" aria-label="Second Brain. Personal Project by Diosito">
+  <svg viewBox="110 120 292 308" aria-hidden="true"><line class="sp-l" pathLength="1" x1="256" y1="158" x2="148" y2="266" style="animation-delay:.15s"/><line class="sp-l" pathLength="1" x1="256" y1="158" x2="364" y2="266" style="animation-delay:.25s"/><line class="sp-l" pathLength="1" x1="148" y1="266" x2="364" y2="266" style="animation-delay:.4s"/><line class="sp-l" pathLength="1" x1="148" y1="266" x2="256" y2="374" style="animation-delay:.5s"/><line class="sp-l" pathLength="1" x1="364" y1="266" x2="256" y2="374" style="animation-delay:.55s"/><line class="sp-l" pathLength="1" x1="148" y1="266" x2="160" y2="394" style="animation-delay:.6s"/><line class="sp-l" pathLength="1" x1="364" y1="266" x2="352" y2="394" style="animation-delay:.65s"/><line class="sp-l" pathLength="1" x1="160" y1="394" x2="256" y2="374" style="animation-delay:.75s"/><line class="sp-l" pathLength="1" x1="256" y1="374" x2="352" y2="394" style="animation-delay:.8s"/><circle class="sp-d" cx="148" cy="266" r="22" style="animation-delay:.25s"/><circle class="sp-d" cx="364" cy="266" r="22" style="animation-delay:.3s"/><circle class="sp-d" cx="256" cy="374" r="22" style="animation-delay:.5s"/><circle class="sp-d" cx="160" cy="394" r="22" style="animation-delay:.6s"/><circle class="sp-d" cx="352" cy="394" r="22" style="animation-delay:.65s"/><circle class="sp-d top" cx="256" cy="158" r="30" style="animation-delay:.9s"/></svg>
+  <div class="sp-n">Second Brain</div>
+  <div class="sp-t">Tu organizador de vida</div>
+  <div class="sp-bar"><i></i></div>
+  <div class="sp-by">Personal Project by <b>Diosito</b><span class="sp-v" id="spV"></span></div>
+</div>
+<script>/* si version.js no llega (señal mala), la pantalla del logo avisa en vez de quedarse esperando */
+setTimeout(function () { if (window.APP_VERSION) return; var s = document.getElementById("splash"), t = s && s.querySelector(".sp-t"); if (!t) return; t.textContent = "Está tardando más de lo normal. Tocá la pantalla para reintentar."; t.style.opacity = "1"; s.onclick = function () { location.reload(); }; }, 7000);
+</script>
 <header id="top">Second Brain</header>
 <div id="upd" hidden><span>Hay una versión nueva.</span><button id="updB">Actualizar</button></div>
 <div id="inst" hidden role="region" aria-label="Instalar la app"><span id="instTxt">Instalala como app y la tenés a mano, también sin conexión.</span><button type="button" id="instBtn">Instalar</button><button type="button" id="instX" class="x" aria-label="Cerrar">×</button></div>
@@ -101,6 +127,23 @@ details{margin:6px 0}summary{cursor:pointer;color:var(--mut);padding:6px 0}detai
 <div id="sheet" hidden></div>
 <div id="aviso" hidden></div>
 <script src="version.js"></script>
+<script>/* pantalla de entrada: una vez por apertura de la app, se queda lo justo para que se vea la animación y se cierra sola o al tocarla */
+(function () {
+  var s = document.getElementById("splash"); if (!s) return;
+  var sv = document.getElementById("spV"); if (sv) sv.textContent = "Versión " + window.APP_VERSION;
+  var t0 = Date.now(), quitar = function () { if (s.parentNode) s.parentNode.removeChild(s); };
+  var cerrar = function () { s.className = "fuera"; setTimeout(quitar, 650); };
+  try {
+    if (navigator.webdriver && !/splash=1/.test(location.search)) return quitar();   // las pruebas automáticas no esperan
+    if (sessionStorage.getItem("sb_splash")) return quitar();                         // una vez por apertura de la app
+    sessionStorage.setItem("sb_splash", "1");
+  } catch (e) {}
+  var listo = function () { setTimeout(cerrar, Math.max(0, 2400 - (Date.now() - t0))); };   // sin esperar al evento «load»: en el celu puede demorar por cosas que no son de la app
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", listo); else listo();
+  s.addEventListener("click", cerrar);
+  setTimeout(cerrar, 3500);
+})();
+</script>
 <script src="modulos/lista.js"></script>
 <script src="instalar.js"></script>
 <script>

@@ -1,8 +1,9 @@
 /* ÚNICO lugar donde cambiás la versión de Second Brain.
    Para publicar algo nuevo: cambiá APP_VERSION y agregá arriba de APP_HISTORIAL una línea de qué cambió. Subí este archivo junto con index.html y sw.js. */
-self.APP_VERSION = "1.10.1";
-self.APP_NOVEDADES = "La bienvenida de la primera vez ahora muestra todo lo que fue sumando la app, no solo la última versión.";
+self.APP_VERSION = "1.11.0";
+self.APP_NOVEDADES = "Pantalla de entrada con el logo animado y una barra de carga, igual que la de Mi Recibo: sale una vez por apertura de la app (se cierra sola o al tocarla) y, si la página tarda en cargar, te avisa y te deja reintentar.";
 self.APP_HISTORIAL = [
+  ["1.11.0", "Pantalla de entrada con el logo animado y una barra de carga, igual que la de Mi Recibo: sale una vez por apertura de la app (se cierra sola o al tocarla) y, si la página tarda en cargar, te avisa y te deja reintentar."],
   ["1.10.1", "La bienvenida de la primera vez ahora muestra todo lo que fue sumando la app, no solo la última versión."],
   ["1.10.0", "Ahora podés instalar Second Brain como app: aparece un aviso con el botón «Instalar» y, si tu navegador no avisa (Brave, iPhone, Firefox), te explica el camino a mano. En Ajustes → «Instalar la app» siempre lo tenés a mano, aunque hayas cerrado el aviso."],
   ["1.9.0", "Finanzas: ahora podés editar un movimiento (monto, categoría, nota, fecha y tipo) y ponerle un tope mensual a cada categoría. Te avisa al llegar al 80 % y al pasarte (al cargar el gasto, en Hoy y en el resumen del mes)."],
