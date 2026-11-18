@@ -1,8 +1,9 @@
 /* ÚNICO lugar donde cambiás la versión de Second Brain.
    Para publicar algo nuevo: cambiá APP_VERSION y agregá arriba de APP_HISTORIAL una línea de qué cambió. Subí este archivo junto con index.html y sw.js. */
-self.APP_VERSION = "1.11.1";
-self.APP_NOVEDADES = "Second Brain y Mi Recibo ahora se pueden instalar y usar a la vez desde el mismo sitio sin pisarse: cada una tiene su propia identidad, su copia sin conexión y sus datos. Si ya la tenías instalada, desinstalala y volvé a instalarla una vez para que quede separada de la otra.";
+self.APP_VERSION = "1.11.2";
+self.APP_NOVEDADES = "Se recuperaron los módulos Estudio, Programación y Finanzas, que no aparecían en la lista de módulos. Tus datos guardados no se tocan.";
 self.APP_HISTORIAL = [
+  ["1.11.2", "Se recuperaron los módulos Estudio, Programación y Finanzas, que no aparecían en la lista de módulos. Tus datos guardados no se tocan."],
   ["1.11.1", "Second Brain y Mi Recibo ahora se pueden instalar y usar a la vez desde el mismo sitio sin pisarse: cada una tiene su propia identidad, su copia sin conexión y sus datos. Si ya la tenías instalada, desinstalala y volvé a instalarla una vez para que quede separada de la otra."],
   ["1.11.0", "Pantalla de entrada con el logo animado y una barra de carga, igual que la de Mi Recibo: sale una vez por apertura de la app (se cierra sola o al tocarla) y, si la página tarda en cargar, te avisa y te deja reintentar."],
   ["1.10.1", "La bienvenida de la primera vez ahora muestra todo lo que fue sumando la app, no solo la última versión."],
