@@ -40,8 +40,8 @@ test("avisos de tareas: solo las pendientes con fecha", () => {
   assert.deepEqual(J(SB.mods.tareas.avisos().map(a => a.c)), ["A"]);
 });
 test("novedades: primera vez muestra solo la versión actual; al actualizar, lo que pasó desde la versión anterior", () => {
-  const primera = abrir(); assert.equal(JSON.parse(primera.ls._d.sb_nov_pend).de, ""); assert.equal(primera.SB.novedades("").length, 1);
+  const primera = abrir(); assert.equal(JSON.parse(primera.ls._d.sb_nov_pend).de, ""); assert.equal(primera.SB.novedades("").length, primera.ctx.APP_HISTORIAL.length);   // desde 1.10.1 la primera vez muestra todo lo que sumó la app
   const act = abrir({datos: {sb_ult_version: "1.0.0"}}); assert.equal(JSON.parse(act.ls._d.sb_nov_pend).de, "1.0.0");
-  assert.deepEqual(J(act.SB.novedades("1.0.0").map(x => x[0])), ["1.2.0", "1.1.0", "1.0.3", "1.0.2", "1.0.1"]); assert.equal(act.SB.novedades(act.ctx.APP_VERSION).length, 0);
+  assert.deepEqual(J(act.SB.novedades("1.0.0").map(x => x[0])), J(act.ctx.APP_HISTORIAL.map(x => x[0]).filter(v => v !== "1.0.0"))); assert.equal(act.SB.novedades(act.ctx.APP_VERSION).length, 0);
   const igual = abrir({datos: {sb_ult_version: act.ctx.APP_VERSION}}); assert.equal(igual.ls._d.sb_nov_pend, undefined);
 });

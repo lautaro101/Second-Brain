@@ -3,7 +3,9 @@
 try { importScripts("version.js"); } catch (e) {}                 // define self.APP_VERSION
 try { importScripts("modulos/lista.js"); } catch (e) {}           // define self.SB_ARCHIVOS: los módulos que se guardan para usar sin conexión
 const VERSION = self.APP_VERSION || "sin-version";
-const V = "second-brain-v" + VERSION;
+const PREF = "second-brain-";                          // todas las cachés de ESTA app empiezan así: en usuario.github.io hay otras apps con su propia caché y no se tocan
+const V = PREF + "v" + VERSION;
+const BASE = (() => { try { return new URL("./", self.location.href).pathname; } catch (e) { return "/"; } })();   // la carpeta de esta app (por ej. /Second-Brain/): este service worker no toca nada fuera de ella
 const AV = "sb-avisos";                               // aquí se guardan los próximos avisos (no se borra al actualizar)
 const SHELL = ["./", "./version.js", "./core.js", "./sync.js", "./seguridad.js", "./instalar.js", "./modulos/lista.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].concat((self.SB_ARCHIVOS || []).map(f => "./" + f));
 const fresco = u => /\/(index\.html|version\.js)?$/.test(u.pathname);   // la página y version.js: siempre se pide a internet primero
@@ -13,13 +15,15 @@ self.addEventListener("install", e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(SHELL.map(u => new Request(u, {cache: "reload"})))));
 });
 self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V && k !== AV).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  // solo se borran las cachés viejas de ESTA app (prefijo PREF); «sb-avisos» no empieza así, así que se conserva, y las de otras apps del mismo dominio ni se miran
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith(PREF) && k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener("fetch", e => {
   const r = e.request;
   if (r.method !== "GET") return;
   const u = new URL(r.url);
   if (u.origin !== location.origin) return;            // Google, Microsoft y demás: no se tocan
+  if (!u.pathname.startsWith(BASE)) return;            // otra app del mismo dominio (otra carpeta): no se toca
   if (r.mode === "navigate" || fresco(u)) {             // la página y version.js: primero internet (revalidando), y si no hay, la guardada
     const clave = r.mode === "navigate" ? "./" : r;
     // primero internet, pero con tope: si en 1,5 segundos no respondió (señal mala), se abre con la copia guardada y la red sigue por detrás actualizándola
@@ -29,10 +33,10 @@ self.addEventListener("fetch", e => {
     });
     const lenta = new Promise(ok => setTimeout(() => ok(null), 1500));
     e.waitUntil(red.catch(() => {}));
-    e.respondWith(Promise.race([red.catch(() => null), lenta]).then(res => res || caches.match(clave).then(hit => hit || red)));
+    e.respondWith(Promise.race([red.catch(() => null), lenta]).then(res => res || caches.match(clave, {cacheName: V}).then(hit => hit || red)));
     return;
   }
-  e.respondWith(caches.match(r).then(hit => hit || fetch(r).then(res => {   // el resto: lo guardado, y si no, internet
+  e.respondWith(caches.match(r, {cacheName: V}).then(hit => hit || fetch(r).then(res => {   // el resto: lo guardado, y si no, internet
     if (res.ok) { const cp = res.clone(); caches.open(V).then(c => c.put(r, cp)); }
     return res;
   })));

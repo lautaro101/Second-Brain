@@ -53,7 +53,7 @@ function abrirSW({red, copia} = {}) {
   let manejador; const guardado = {put: async () => {}};
   const ctx = {
     self: {addEventListener: (t, f) => { if (t === "fetch") manejador = f; }, registration: {}, clients: {claim: async () => {}}, skipWaiting() {}},
-    importScripts() {}, location: {origin: "https://prueba.test"}, URL, setTimeout, clearTimeout, Promise, console,
+    importScripts() {}, location: {origin: "https://prueba.test", href: "https://prueba.test/Second-Brain/sw.js"}, URL, setTimeout, clearTimeout, Promise, console,
     Request: class { constructor(u) { this.url = u.url || u; this.mode = u.mode || "navigate"; } }, Response: class {},
     fetch: red || (() => Promise.reject(new Error("sin red"))),
     caches: {open: async () => guardado, match: async () => copia, keys: async () => [], delete: async () => true},

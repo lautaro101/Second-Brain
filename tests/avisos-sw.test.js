@@ -26,7 +26,7 @@ test("sin eventos o con datos vacíos no rompe", () => {
 });
 async function pedir(red, copia) {
   const {manejador} = abrirSW({red, copia}); let resp; const t0 = Date.now();
-  manejador({request: {method: "GET", url: "https://prueba.test/index.html", mode: "navigate"}, respondWith: p => { resp = p; }, waitUntil() {}});
+  manejador({request: {method: "GET", url: "https://prueba.test/Second-Brain/index.html", mode: "navigate"}, respondWith: p => { resp = p; }, waitUntil() {}});
   const r = await resp; return {r, ms: Date.now() - t0};
 }
 const RED_OK = () => Promise.resolve({ok: true, tag: "RED", clone() { return this; }});

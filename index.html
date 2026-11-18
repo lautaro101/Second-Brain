@@ -151,7 +151,7 @@ window.APP_VERSION = window.APP_VERSION || "sin versión";
 /* Red de seguridad del NÚCLEO: si el núcleo falla se muestra qué pasó y cómo salir. Un error dentro de un módulo no entra acá: solo marca a ese módulo. */
 (function () {
   var mostrado = false;
-  function limpiar() { var q = []; try { if (navigator.serviceWorker) q.push(navigator.serviceWorker.getRegistrations().then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); })); } catch (e) {} try { if (window.caches) q.push(caches.keys().then(function (k) { return Promise.all(k.map(function (x) { return caches.delete(x); })); })); } catch (e) {} return Promise.all(q).catch(function () {}); }
+  function limpiar() { var q = []; try { if (navigator.serviceWorker) q.push(navigator.serviceWorker.getRegistrations().then(function (r) { var mio = new URL("./", location.href).href; return Promise.all(r.filter(function (x) { return x.scope === mio; }).map(function (x) { return x.unregister(); })); })); } catch (e) {} try { if (window.caches) q.push(caches.keys().then(function (k) { return Promise.all(k.filter(function (x) { return /^(second-brain-|sb-)/.test(x); }).map(function (x) { return caches.delete(x); })); })); } catch (e) {} return Promise.all(q).catch(function () {}); }
   function caja(msg) {
     if (mostrado) return; mostrado = true;
     var d = document.createElement("div"); d.style.cssText = "position:fixed;inset:0;z-index:99999;overflow:auto;padding:20px;background:#fff;color:#14202c;font:16px/1.45 system-ui,sans-serif";
@@ -191,7 +191,7 @@ window.APP_VERSION = window.APP_VERSION || "sin versión";
 if ("serviceWorker" in navigator) {
   var teniaSW = !!navigator.serviceWorker.controller, recargado = false;
   navigator.serviceWorker.addEventListener("controllerchange", function () { if (teniaSW && !recargado) { recargado = true; location.reload(); } });
-  navigator.serviceWorker.register("sw.js").then(function (reg) {
+  navigator.serviceWorker.register("sw.js", {scope: "./"}).then(function (reg) {
     function avisar(w) { if (!navigator.serviceWorker.controller) return; document.getElementById("upd").hidden = false; document.getElementById("updB").onclick = function () { w.postMessage({tipo: "actualizar"}); }; }
     if (reg.waiting) avisar(reg.waiting);
     document.addEventListener("visibilitychange", function () { if (!document.hidden) reg.update().catch(function () {}); });   // al volver a la app, busca versión nueva
