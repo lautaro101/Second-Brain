@@ -1,0 +1,6 @@
+{
+  "name": "second-brain",
+  "private": true,
+  "description": "Second Brain: organizador de vida personal modular",
+  "scripts": { "test": "node --test \"tests/*.test.js\"" }
+}

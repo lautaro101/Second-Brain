@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#1c3556">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-512.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Second Brain">
+<title>Second Brain</title>
+<style>
+:root{--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--paper:#eef1ea;--sheet:#fcfdf9;--ink:#14202c;--mut:#586674;--line:#d3dacb;--fill:#e1e7da;--navy:#1c3556;--on-navy:#f1f5ef;--ok:#1d6a50;--ok-bg:#d6e9dd;--warn:#654508;--warn-bg:#f3e5b9;--bad:#a2402a;--focus:#2a66c9}
+@media (prefers-color-scheme:dark){:root{--paper:#10161d;--sheet:#18212b;--ink:#e8eee9;--mut:#9aa8b4;--line:#2a3743;--fill:#223040;--navy:#2b4c7a;--ok:#7fd3a9;--ok-bg:#1d3a2f;--warn:#f0d58a;--warn-bg:#3a3014;--bad:#f0a58f;--focus:#7aa8f0}}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 var(--sans);padding:calc(56px + env(safe-area-inset-top)) 0 calc(88px + env(safe-area-inset-bottom))}
+#top{position:fixed;top:0;left:0;right:0;z-index:5;background:var(--navy);color:var(--on-navy);font-weight:700;font-size:18px;padding:calc(14px + env(safe-area-inset-top)) 16px 12px;height:calc(52px + env(safe-area-inset-top))}
+#app{max-width:680px;margin:0 auto;padding:14px 14px 0}
+h2.fecha{font-size:20px;margin:4px 0 12px}h2.fecha::first-letter{text-transform:uppercase}h3{margin:0 0 8px;font-size:15px;color:var(--mut)}
+.card{display:block;background:var(--sheet);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:0 0 12px;color:inherit;text-decoration:none}
+.card p{margin:4px 0}.enlace b{display:block}small,.ayuda{color:var(--mut);font-size:13px;display:block}.vacio{text-align:center;color:var(--mut);margin:36px 0}
+.fila{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}.card>.fila:first-of-type,h3+.fila{border-top:0}
+.tx{flex:1;min-width:0;overflow-wrap:anywhere}.tx span{display:block}.hecha span{text-decoration:line-through;color:var(--mut)}
+.chk{flex:none;width:30px;height:30px;border-radius:50%;border:2px solid var(--mut);background:transparent;color:var(--on-navy);font-size:16px;padding:0}.chk.on{background:var(--ok);border-color:var(--ok);color:var(--sheet)}
+.item{display:block;padding:8px 0;color:inherit;text-decoration:none;border-top:1px solid var(--line)}h3+.item{border-top:0}.card.item{border-top:1px solid var(--line)}
+input,textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 8px}
+input[type=checkbox]{width:auto;margin:0}textarea{resize:vertical}input:focus,textarea:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+button,.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--fill);color:var(--ink);border-radius:10px;padding:9px 14px;cursor:pointer;text-decoration:none;display:inline-block}
+button.pri{background:var(--navy);color:var(--on-navy);border-color:var(--navy);width:100%;margin-bottom:12px}.x{background:transparent;color:var(--bad)}.link{background:none;border:0;color:var(--mut);width:100%}
+.fila-b{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.fila-b>input{flex:1;min-width:120px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}.chip{border-radius:20px;padding:5px 12px;font-size:14px}.chip.on,label.chip:not(.off){background:var(--navy);color:var(--on-navy);border-color:var(--navy)}label.chip.off{opacity:.5}
+.grilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}.mod{background:var(--sheet);border:1px solid var(--line);border-radius:14px;padding:16px 10px;text-align:center;color:inherit;text-decoration:none;font-weight:600}.mod i{display:block;font-style:normal;font-size:30px}
+.puntos{display:flex;gap:6px;padding-top:6px}.puntos i{width:14px;height:14px;border-radius:50%;background:var(--fill)}.puntos i.si{background:var(--ok)}.puntos i.no{background:var(--warn-bg);border:1px solid var(--warn)}
+.animo{display:flex;gap:6px;margin-bottom:8px}.animo button{flex:1;font-size:24px;padding:6px}.animo button.on{background:var(--ok-bg);border-color:var(--ok)}
+.aviso-f{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}.aviso-f small{color:inherit}
+.sy-ok{color:var(--ok);font-size:14px;margin:6px 0}.sy-err{color:var(--bad);font-size:14px;margin:6px 0}
+[hidden]{display:none!important}
+.md{line-height:1.55;overflow-wrap:anywhere}.md>:first-child{margin-top:0}.md>:last-child{margin-bottom:0}
+.md h2,.md h3,.md h4,.md h5,.md h6{margin:16px 0 6px;color:var(--ink);line-height:1.25;font-size:15px}.md h2{font-size:20px}.md h3{font-size:17px}.md h2.nt{font-size:22px;margin:0 0 10px}
+.md p{margin:8px 0}
+.md .li{display:flex;gap:8px;align-items:flex-start;padding:2px 0 2px calc(var(--n,0) * 1.3em)}.md .li>span:last-child{flex:1;min-width:0}.md .mk{flex:none;min-width:1.1em;text-align:center;color:var(--mut)}.md .li.hecha>span:last-child{text-decoration:line-through;color:var(--mut)}
+.ckmd{flex:none;width:22px;height:22px;border-radius:6px;border:2px solid var(--mut);background:transparent;color:var(--sheet);font-size:14px;padding:0;line-height:1;margin-top:2px}.ckmd.on{background:var(--ok);border-color:var(--ok)}
+.md code{background:var(--fill);border-radius:6px;padding:1px 5px;font:.92em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.md pre{background:var(--fill);border-radius:10px;padding:10px 12px;overflow:auto;margin:10px 0}.md pre code{background:none;padding:0;font-size:14px}
+.md blockquote{margin:10px 0;padding:2px 12px;border-left:3px solid var(--line);color:var(--mut)}.md hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+.md a{color:var(--focus)}.tg{background:var(--fill);color:var(--mut);border-radius:10px;padding:0 7px;font-size:.9em}.wl{color:var(--focus)}.wl.falta{color:var(--mut);border-bottom:1px dashed var(--mut)}
+.sy{flex-wrap:wrap}.sy .tx{flex:1 1 180px}.sy .fila-b{margin:0}
+.barra{align-items:center}.barra .pri.chico{width:auto;margin:0}
+.tb{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}.tb button{min-width:40px;padding:7px 10px}
+textarea.ed{font:15px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;min-height:48vh}
+h3+.card.item,.card.item+h3{margin-top:4px}
+#nav{position:fixed;bottom:0;left:0;right:0;z-index:5;display:flex;justify-content:space-around;align-items:center;background:var(--sheet);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+#nav a{flex:1;text-align:center;color:var(--mut);text-decoration:none;font-size:12px;padding:4px 0}#nav a i{display:block;font-style:normal;font-size:20px}#nav a.on{color:var(--navy);font-weight:700}@media (prefers-color-scheme:dark){#nav a.on{color:var(--ok)}}
+#fab{flex:none;width:58px;height:58px;margin:-26px 6px 0;border-radius:50%;background:var(--navy);color:var(--on-navy);font-size:30px;line-height:1;padding:0;border:3px solid var(--paper);box-shadow:0 3px 10px #0004}
+#sheet,#nov{position:fixed;inset:0;z-index:10;background:#0008;display:flex;align-items:flex-end}#sheet[hidden]{display:none}#nov{z-index:20}#nov h2{margin:0 0 8px}#nov .hoja{max-height:85vh;overflow:auto}.hoja{width:100%;max-width:680px;margin:0 auto;background:var(--sheet);border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+#aviso{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:12;background:var(--navy);color:var(--on-navy);padding:10px 16px;border-radius:20px;font-size:14px}#aviso[hidden]{display:none}
+#upd{position:fixed;top:calc(52px + env(safe-area-inset-top));left:0;right:0;z-index:6;background:var(--warn-bg);color:var(--warn);padding:8px 14px;display:flex;gap:10px;align-items:center;font-size:14px}#upd[hidden]{display:none}#upd span{flex:1}
+
+.fl{display:none}
+@media (hover:hover){button:hover,.btn:hover,.mod:hover{filter:brightness(.96)}.item:hover{background:var(--fill)}}
+@media (min-width:900px){
+body{padding:0 0 40px 230px}
+#top{left:230px;height:56px;padding:16px 28px 12px}
+#app{max-width:1020px;padding:76px 28px 0}
+#app[data-p=hoy],#app[data-p=mas]{columns:2;column-gap:16px}
+#app[data-p=hoy] .card,#app[data-p=mas] .mod{break-inside:avoid}#app[data-p=hoy] h2.fecha{column-span:all}
+#nav{top:0;bottom:0;right:auto;width:230px;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:4px;border-top:0;border-right:1px solid var(--line);padding:18px 12px}
+#nav a{flex:none;display:flex;align-items:center;gap:10px;text-align:left;font-size:15px;padding:10px 12px;border-radius:10px}#nav a i{display:inline;font-size:18px}#nav a:hover,#nav a.on{background:var(--fill)}
+#fab{order:-1;width:100%;height:auto;margin:0 0 14px;border-radius:10px;font-size:16px;padding:12px;box-shadow:none;border:0;display:flex;gap:8px;justify-content:center;align-items:center}.fl{display:inline}#fab kbd{font:12px var(--sans);opacity:.7;border:1px solid currentColor;border-radius:4px;padding:0 5px}
+#sheet,#nov{align-items:center}.hoja{max-width:560px;border-radius:18px;padding:20px}
+#upd{left:230px;top:56px}#aviso{bottom:28px;left:calc(50% + 115px)}
+}
+@media (min-width:1500px){#app{max-width:1200px}#app[data-p=hoy]{columns:3}}
+#bloqueo{position:fixed;inset:0;z-index:30;background:var(--paper);display:flex;align-items:center;justify-content:center;padding:20px}
+#bloqueo form{width:100%;max-width:320px;background:var(--sheet);border:1px solid var(--line);border-radius:18px;padding:22px;text-align:center}
+#bloqueo h2{margin:0 0 6px}#bloqueo input{text-align:center;font-size:24px;letter-spacing:.3em}#bloqueo .sy-err{min-height:1.4em}
+body.bloq #top,body.bloq #app,body.bloq #nav,body.bloq #upd,body.bloq #sheet,body.bloq #nov,body.bloq #aviso,body.bloq #resg{display:none!important}
+body.oc #top,body.oc #app,body.oc #nav,body.oc #upd,body.oc #sheet,body.oc #nov,body.oc #resg{visibility:hidden}
+#resg{position:fixed;top:calc(52px + env(safe-area-inset-top));left:0;right:0;z-index:6;background:var(--warn-bg);color:var(--warn);padding:8px 14px;display:flex;gap:10px;align-items:center;font-size:14px}#resg span{flex:1}
+#upd:not([hidden])~#resg{top:calc(96px + env(safe-area-inset-top))}
+details{margin:6px 0}summary{cursor:pointer;color:var(--mut);padding:6px 0}details form{margin-top:8px}
+@media (min-width:900px){#resg{left:230px;top:56px}#upd:not([hidden])~#resg{top:96px}}
+</style>
+</head>
+<body>
+<header id="top">Second Brain</header>
+<div id="upd" hidden><span>Hay una versión nueva.</span><button id="updB">Actualizar</button></div>
+<main id="app"></main>
+<nav id="nav"></nav>
+<div id="sheet" hidden></div>
+<div id="aviso" hidden></div>
+<script src="version.js"></script>
+<script src="modulos/lista.js"></script>
+<script>
+window.APP_VERSION = window.APP_VERSION || "sin versión";
+/* Red de seguridad del NÚCLEO: si el núcleo falla se muestra qué pasó y cómo salir. Un error dentro de un módulo no entra acá: solo marca a ese módulo. */
+(function () {
+  var mostrado = false;
+  function limpiar() { var q = []; try { if (navigator.serviceWorker) q.push(navigator.serviceWorker.getRegistrations().then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); })); } catch (e) {} try { if (window.caches) q.push(caches.keys().then(function (k) { return Promise.all(k.map(function (x) { return caches.delete(x); })); })); } catch (e) {} return Promise.all(q).catch(function () {}); }
+  function caja(msg) {
+    if (mostrado) return; mostrado = true;
+    var d = document.createElement("div"); d.style.cssText = "position:fixed;inset:0;z-index:99999;overflow:auto;padding:20px;background:#fff;color:#14202c;font:16px/1.45 system-ui,sans-serif";
+    d.innerHTML = "<h2>Second Brain no pudo arrancar</h2><p>Tus datos no se borraron.</p>";
+    function btn(t, f) { var b = document.createElement("button"); b.textContent = t; b.style.cssText = "display:block;width:100%;margin:8px 0;padding:14px;font:600 16px system-ui;border:0;border-radius:10px;background:#1c3556;color:#fff"; b.onclick = f; d.appendChild(b); }
+    btn("1. Reintentar", function () { location.reload(); });
+    btn("2. Limpiar la copia guardada de la app y reintentar", function () { limpiar().then(function () { location.reload(); }); });
+    var pre = document.createElement("pre"); pre.style.cssText = "white-space:pre-wrap;background:#eef1ea;padding:10px;border-radius:8px;font-size:13px"; pre.textContent = "v" + window.APP_VERSION + "\n" + msg; d.appendChild(pre);
+    document.body.appendChild(d);
+  }
+  window.addEventListener("error", function (e) {
+    var f = e.filename || "";
+    if (/modulos\//.test(f) && window.SB) { window.SB.fallos[f.split("/").pop()] = e.message; return; }
+    caja((e.message || "error") + (e.lineno ? " (línea " + e.lineno + ")" : ""));
+  });
+  window.addEventListener("load", function () { setTimeout(function () { if (!window.__listo) caja("La app no terminó de cargar."); }, 4000); });
+})();
+</script>
+<script src="core.js"></script>
+<script src="sync.js"></script>
+<script src="seguridad.js"></script>
+<script>
+/* Primero se abren los datos guardados (IndexedDB); después se carga cada módulo por separado: si uno no llega o falla, los demás arrancan igual. */
+(function () {
+  var lista = self.SB_ARCHIVOS || [], n = lista.length, ya = false;
+  function fin() { if (ya) return; ya = true; SB.arrancar(); }
+  function uno() { if (--n <= 0) fin(); }
+  function cargar() {
+    if (!n) return fin();
+    lista.forEach(function (src) { var s = document.createElement("script"); s.src = src; s.async = false; s.onload = uno; s.onerror = function () { SB.fallos[src] = "no se pudo cargar el archivo"; uno(); }; document.body.appendChild(s); });
+    setTimeout(fin, 6000);
+  }
+  SB.iniciar().then(cargar, cargar);
+})();
+/* Service worker + aviso de versión nueva (la versión nueva espera hasta que toques «Actualizar»). */
+if ("serviceWorker" in navigator) {
+  var teniaSW = !!navigator.serviceWorker.controller, recargado = false;
+  navigator.serviceWorker.addEventListener("controllerchange", function () { if (teniaSW && !recargado) { recargado = true; location.reload(); } });
+  navigator.serviceWorker.register("sw.js").then(function (reg) {
+    function avisar(w) { if (!navigator.serviceWorker.controller) return; document.getElementById("upd").hidden = false; document.getElementById("updB").onclick = function () { w.postMessage({tipo: "actualizar"}); }; }
+    if (reg.waiting) avisar(reg.waiting);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) reg.update().catch(function () {}); });   // al volver a la app, busca versión nueva
+    reg.addEventListener("updatefound", function () { var w = reg.installing; if (w) w.addEventListener("statechange", function () { if (w.state === "installed") avisar(w); }); });
+  }).catch(function () {});
+}
+</script>
+</body>
+</html>

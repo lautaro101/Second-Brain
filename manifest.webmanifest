@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "Second Brain",
+  "short_name": "Second Brain",
+  "description": "Tu organizador de vida: captura, notas, tareas, hábitos y diario, y qué toca hoy.",
+  "lang": "es-AR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1c3556",
+  "theme_color": "#1c3556",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
