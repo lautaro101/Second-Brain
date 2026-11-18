@@ -92,6 +92,7 @@ SB.registrar({
   buscar: q => D().n.filter(n => norm(n.x).includes(norm(q))).map(n => ({t: (n.pin ? "📌 " : "") + titulo(n.x), s: tags(n.x).map(t => "#" + t).join(" "), ir: "#/notas/" + n.id})),
   semana: () => { const s = Date.now() - 7 * 864e5, k = D().n.filter(n => n.m > s).length; return [k + (k === 1 ? " nota nueva o editada" : " notas nuevas o editadas") + " esta semana."]; },
   md: render, titulo, tags, alternarCheck, plantillas: PLANTILLAS,
+  crear: (x, extra) => nueva(x, extra), porEtiqueta: t => D().n.filter(n => tags(n.x).includes(String(t).toLowerCase())),   // para que otros módulos (Estudio, Programación) se apoyen en Notas
   pantalla(el, sub) {
     const [id, modo] = (sub || "").split("/"), n = id && D().n.find(x => x.id === id);
     if (n) return modo === "e" ? editar(el, n) : ver(el, n);
