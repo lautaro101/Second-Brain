@@ -122,12 +122,12 @@ const seguro = (m, f, ...a) => { try { return typeof m[f] === "function" ? m[f](
 const activos = () => SB.orden.map(id => SB.mods[id]).filter(m => !cfg().off.includes(m.id));
 const vn = v => String(v).split(".").map(Number), mayor = (a, b) => { const x = vn(a), y = vn(b); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
 /* Lista de cambios desde la versión «de» (sin incluirla). Con «de» vacío (primera vez) devuelve solo la versión actual. */
-SB.novedades = de => { const h = self.APP_HISTORIAL || []; return de ? h.filter(x => mayor(x[0], de)) : h.slice(0, 1); };
+SB.novedades = de => { const h = self.APP_HISTORIAL || []; return de ? h.filter(x => mayor(x[0], de)) : h.slice(); };   // primera vez: todo lo que fue sumando la app; al actualizar: lo publicado desde tu versión
 function mostrarNovedades() { try {
   if (SB.bloqueado) return;
   const p = leer("sb_nov_pend", null); if (!p) return; const l = SB.novedades(p.de), primera = !p.de;
   const o = document.createElement("div"); o.id = "nov"; o.setAttribute("role", "dialog");
-  o.innerHTML = `<div class="hoja"><h2>${primera ? "¡Bienvenido a Second Brain!" : "Novedades"}</h2>${primera ? `<p>Anotá todo lo que se te ocurra con el botón ＋ y después ordenalo. En <b>Hoy</b> ves qué toca.</p>` : ""}
+  o.innerHTML = `<div class="hoja"><h2>${primera ? "¡Bienvenido a Second Brain!" : "Novedades"}</h2>${primera ? `<p>Anotá todo lo que se te ocurra con el botón ＋ y después ordenalo. En <b>Hoy</b> ves qué toca.</p><p>Esto es lo que fue sumando la app hasta hoy (estás en la versión ${esc(self.APP_VERSION)}):</p>` : ""}
     ${l.map(x => `<p><b>Versión ${esc(x[0])}</b><small>${esc(x[1])}</small></p>`).join("")}<button class="pri" type="button">Entendido</button></div>`;
   const cerrar = () => { try { LS.removeItem("sb_nov_pend"); } catch (e) {} document.removeEventListener("keydown", tecla); o.remove(); };
   const tecla = e => { if (e.key === "Escape") cerrar(); };
@@ -180,7 +180,7 @@ const destinos = () => activos().filter(m => m.captura && typeof m.captura.guard
 function abrirCaptura() {
   const s = $("sheet"), d = destinos(); s.hidden = false;
   s.innerHTML = `<div class="hoja"><form data-f="cap"><textarea name="t" rows="3" placeholder="¿Qué se te ocurrió? Con #etiqueta se ordena solo"></textarea>
-    <div class="fila-b"><button class="pri" type="submit">Guardar en Inbox</button>${d.map(m => `<button type="button" data-a="dest" data-id="${esc(m.id)}">${m.icono} ${esc(m.captura.etiqueta)}</button>`).join("")}</div>
+    <div class="fila-b"><button class="pri" type="submit">${SB.reglas.auto() ? "Guardar y ordenar" : "Guardar en Inbox"}</button>${d.map(m => `<button type="button" data-a="dest" data-id="${esc(m.id)}">${m.icono} ${esc(m.captura.etiqueta)}</button>`).join("")}</div>
     <button type="button" class="link" data-a="cerrar">Cancelar</button></form></div>`;
   const cerrar = () => { s.hidden = true; s.innerHTML = ""; };
   const texto = () => s.querySelector("textarea").value.trim();
@@ -189,12 +189,40 @@ function abrirCaptura() {
     cerrar(); SB.aviso("Guardado en " + m.captura.etiqueta); pintar(); };
   eventos(s, {
     a: (a, n) => { if (a === "cerrar") cerrar(); else if (a === "dest") mover(n); },
-    f: () => { const t = texto(); if (!t) return; const l = inbox(); l.unshift({id: SB.u.uid(), t, f: Date.now()}); ponerInbox(l); cerrar(); SB.aviso("Anotado en el Inbox"); pintar(); }
+    f: () => { const t = texto(); if (!t) return; const m = SB.reglas.auto() ? rutear(t) : null;
+      if (m) { cerrar(); SB.aviso("Ordenado solo → " + m.icono + " " + m.captura.etiqueta); pintar(); return; }
+      const l = inbox(); l.unshift({id: SB.u.uid(), t, f: Date.now()}); ponerInbox(l); cerrar(); SB.aviso("Anotado en el Inbox"); pintar(); }
   });
   const base = s.onclick; s.onclick = e => { if (e.target === s) cerrar(); else base(e); };
   s.querySelector("textarea").onkeydown = e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") s.querySelector("form").requestSubmit(); };
   s.querySelector("textarea").focus();
 }
+
+
+/* ---------- Reglas del Inbox: lo que escribís se ordena solo ----------
+   Una regla: {id, tipo: "e" empieza con | "c" contiene, p: palabras separadas por coma, d: id del módulo destino}. Gana la primera que coincide; las nuevas van arriba.
+   Se comparan sin mayúsculas ni tildes y por palabra entera ("comprar" no atrapa "comprarme"). Las reglas se guardan en este dispositivo (como los módulos activos). */
+const REGLAS_BASE = [
+  {id: "b1", tipo: "e", p: "comprar, pagar, llamar, entregar, renovar, arreglar, sacar turno, recordar", d: "tareas"},
+  {id: "b2", tipo: "e", p: "idea", d: "notas"}, {id: "b3", tipo: "c", p: "#idea, #nota", d: "notas"},
+  {id: "b4", tipo: "e", p: "hoy me, hoy fue, hoy aprendí, me sentí", d: "diario"}, {id: "b5", tipo: "c", p: "#diario", d: "diario"},
+  {id: "b6", tipo: "e", p: "gasto, gasté, ingreso, cobré", d: "finanzas"}
+];
+const reglas = () => { const c = cfg(); return Array.isArray(c.reglas) ? c.reglas : REGLAS_BASE.map(r => ({...r})); };
+const guardarReglas = r => { const c = cfg(); c.reglas = r; poner("sb_cfg", c); };
+const coincide = (t, tipo, p) => { if (!p) return false; const q = p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); return new RegExp((tipo === "e" ? "^" : "(^|[^a-z0-9])") + q + "($|[^a-z0-9])").test(t); };
+const reglaPara = texto => { const t = norm(texto).trim(), off = cfg().off;
+  return reglas().find(r => { const m = SB.mods[r.d]; return m && m.captura && !off.includes(r.d) && String(r.p).split(",").some(p => coincide(t, r.tipo, norm(p).trim())); }) || null; };
+const rutear = texto => { const r = reglaPara(texto), m = r && SB.mods[r.d]; if (!m) return null;
+  try { m.captura.guardar(texto); return m; } catch (e) { SB.fallos[m.id + ".captura"] = e.message; return null; } };
+const ordenarInbox = () => { const resto = []; let n = 0; inbox().slice().forEach(x => { if (rutear(x.t)) n++; else resto.push(x); }); if (n) ponerInbox(resto); return n; };
+SB.reglas = {regla: reglaPara, rutear, ordenar: ordenarInbox, lista: reglas, auto: () => cfg().auto !== false};
+const reglasHtml = () => { const rs = reglas(), d = destinos(), off = cfg().off;
+  return `<section class="card"><h3>🪄 Ordenar solo</h3><label class="fila"><input type="checkbox" data-c="auto"${cfg().auto === false ? "" : " checked"}><span class="tx">Ordenar al capturar<small>Si lo que escribís coincide con una regla, va directo a su módulo</small></span></label>
+    ${rs.map(r => { const m = SB.mods[r.d]; return `<div class="fila"><span class="tx">${r.tipo === "e" ? "Empieza con" : "Contiene"} «${esc(r.p)}»<small>→ ${m ? m.icono + " " + esc(m.captura ? m.captura.etiqueta : m.nombre) + (off.includes(r.d) ? " (módulo apagado)" : "") : "módulo no disponible"}</small></span><button class="x" data-a="r-del" data-id="${esc(r.id)}" aria-label="Borrar regla">✕</button></div>`; }).join("")}
+    <form data-f="regla"><div class="fila-b"><select name="tipo" aria-label="Tipo de regla"><option value="e">Empieza con</option><option value="c">Contiene</option></select><select name="d" aria-label="Destino">${d.map(m => `<option value="${esc(m.id)}">${m.icono} ${esc(m.captura.etiqueta)}</option>`).join("")}</select></div>
+      <input name="p" placeholder="Palabras, separadas por coma (ej: comprar, pagar)" required autocomplete="off"><button class="pri">Agregar regla</button></form>
+    <div class="fila-b"><button data-a="r-base">Volver a las reglas básicas</button></div></section>`; };
 
 /* ---------- Pantallas del núcleo ---------- */
 let HOYITEMS = [];
@@ -215,10 +243,19 @@ function pHoy(el) {
 }
 function pInbox(el) {
   const inb = inbox(), d = destinos();
-  el.innerHTML = inb.length ? inb.map(x => `<div class="card"><p class="tx">${esc(x.t)}</p><div class="fila-b">${d.map(m => `<button data-a="mover" data-id="${esc(x.id)}" data-m="${esc(m.id)}">${m.icono} ${esc(m.captura.etiqueta)}</button>`).join("")}<button class="x" data-a="del" data-id="${esc(x.id)}">Borrar</button></div></div>`).join("") : `<p class="vacio">Inbox vacío 🎉</p>`;
-  eventos(el, {a: (a, n) => { const l = inbox(), i = l.findIndex(x => x.id === n.dataset.id); if (i < 0) return;
-    if (a === "mover") { const m = SB.mods[n.dataset.m]; try { m.captura.guardar(l[i].t); } catch (e) { SB.fallos[m.id + ".captura"] = e.message; return; } }
-    l.splice(i, 1); ponerInbox(l); pintar(); }});
+  el.innerHTML = (inb.length ? `<div class="fila-b"><button data-a="r-ordenar">🪄 Ordenar con las reglas</button></div>` + inb.map(x => `<div class="card"><p class="tx">${esc(x.t)}</p><div class="fila-b">${d.map(m => `<button data-a="mover" data-id="${esc(x.id)}" data-m="${esc(m.id)}">${m.icono} ${esc(m.captura.etiqueta)}</button>`).join("")}<button class="x" data-a="del" data-id="${esc(x.id)}">Borrar</button></div></div>`).join("") : `<p class="vacio">Inbox vacío 🎉</p>`) + reglasHtml();
+  eventos(el, {
+    c: (a, n) => { if (a === "auto") { const k = cfg(); k.auto = n.checked; poner("sb_cfg", k); } },
+    f: (a, f) => { const p = f.p.value.trim(); if (!p || !f.d.value) return; const r = reglas().slice(); r.unshift({id: SB.u.uid(), tipo: f.tipo.value === "c" ? "c" : "e", p, d: f.d.value}); guardarReglas(r); pintar(); },
+    a: (a, n) => {
+      if (a === "r-ordenar") { const k = ordenarInbox(); SB.aviso(k ? (k === 1 ? "1 cosa ordenada" : k + " cosas ordenadas") : "Ninguna coincidió con las reglas"); return pintar(); }
+      if (a === "r-del") { guardarReglas(reglas().filter(r => r.id !== n.dataset.id)); return pintar(); }
+      if (a === "r-base") { if (confirm("¿Volver a las reglas básicas? Se pierden las que agregaste.")) { const k = cfg(); delete k.reglas; poner("sb_cfg", k); } return pintar(); }
+      const l = inbox(), i = l.findIndex(x => x.id === n.dataset.id); if (i < 0) return;
+      if (a === "mover") { const m = SB.mods[n.dataset.m]; try { m.captura.guardar(l[i].t); } catch (e) { SB.fallos[m.id + ".captura"] = e.message; return; } }
+      l.splice(i, 1); ponerInbox(l); pintar();
+    }
+  });
 }
 function pBuscar(el) {
   el.innerHTML = `<input type="search" id="q" placeholder="Buscar en todo…" autocomplete="off"><div id="res"></div>`;
@@ -267,7 +304,7 @@ function pAjustes(el) {
       if (a === "avisos") { if (!window.Notification) return alert("Este navegador no permite avisos."); Notification.requestPermission().then(p => { SB.aviso(p === "granted" ? "Avisos activados" : "Los avisos quedaron bloqueados");
         if (p === "granted") navigator.serviceWorker.ready.then(r => r.periodicSync && r.periodicSync.register("avisos", {minInterval: 864e5})).catch(() => {}).then(enviarAvisos); }); }
       if (a === "buscarUpd") { const m = $("ultUpd"), sw = navigator.serviceWorker; if (!sw) { m.textContent = "Este navegador no permite actualizar desde la web."; return; } m.textContent = "Buscando…";
-        sw.getRegistration().then(r => r ? r.update().then(() => new Promise(ok => setTimeout(ok, 1500))).then(() => { poner("sb_ub", Date.now()); m.textContent = r.waiting || r.installing ? "Hay una versión nueva: tocá «Actualizar» arriba." : "Ya tenés la última versión (" + window.APP_VERSION + ")."; }) : (m.textContent = "La app todavía no está instalada para usar sin conexión.")).catch(() => { m.textContent = "No se pudo buscar: revisá tu conexión."; }); }
+        sw.getRegistration().then(r => r ? r.update().then(() => new Promise(ok => setTimeout(ok, 1500))).then(() => { poner("sb_ub", Date.now()); m.textContent = r.waiting || r.installing ? "Hay una versión nueva: tocá «Actualizar» arriba." : "Ya tenés la última versión (" + window.APP_VERSION + ")."; }) : (m.textContent = "La app todavía no está instalada para usar sin conexión.")).catch(e => { m.textContent = (navigator.onLine === false ? "Sin conexión. " : "No se pudo buscar la actualización. ") + "Motivo: " + ((e && (e.name ? e.name + ": " : "") + (e.message || "")) || "desconocido") + "."; }); }
       if (a === "prueba") { const c = navigator.serviceWorker && navigator.serviceWorker.controller; if (c) c.postMessage({tipo: "prueba"}); } }
   });
 }

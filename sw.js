@@ -5,7 +5,7 @@ try { importScripts("modulos/lista.js"); } catch (e) {}           // define self
 const VERSION = self.APP_VERSION || "sin-version";
 const V = "second-brain-v" + VERSION;
 const AV = "sb-avisos";                               // aquí se guardan los próximos avisos (no se borra al actualizar)
-const SHELL = ["./", "./version.js", "./core.js", "./sync.js", "./seguridad.js", "./modulos/lista.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].concat((self.SB_ARCHIVOS || []).map(f => "./" + f));
+const SHELL = ["./", "./version.js", "./core.js", "./sync.js", "./seguridad.js", "./instalar.js", "./modulos/lista.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].concat((self.SB_ARCHIVOS || []).map(f => "./" + f));
 const fresco = u => /\/(index\.html|version\.js)?$/.test(u.pathname);   // la página y version.js: siempre se pide a internet primero
 
 self.addEventListener("install", e => {
@@ -42,27 +42,33 @@ self.addEventListener("fetch", e => {
 // La página guarda acá la lista de los próximos eventos {f: "AAAA-MM-DD", t: título, c: texto}. Cuando Android despierta al service worker
 // (periodicsync, más o menos una vez al día, o cuando abrís la app) se muestran los de hoy y los de mañana, una sola vez cada uno.
 const ymdL = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-function avisosPendientes(eventos, ahora, avisados) {
+/* Eventos: {f, t, c, k?, av?, hoy?, solo?, bg?}. k: identifica al dueño del aviso (dos tareas con la misma fecha no se pisan). av: avisos con anticipación (días antes); hoy: con av, además avisa el mismo día.
+   solo: sin av, avisa únicamente el mismo día (no el día antes). bg: aviso «de fondo» (hábitos): no se muestra si la app está abierta y a la vista. */
+function avisosPendientes(eventos, ahora, avisados, visible) {
   const hoy = ymdL(ahora), man = ymdL(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 1)), ya = new Set(avisados), out = [];
   (eventos || []).forEach(e => {
+    if (e.bg && visible) return;
+    const k = e.k ? "|" + e.k : "";
     if (Array.isArray(e.av) && e.av.length) {         // avisos con anticipación (feriados): por ejemplo 7, 3 y 1 día antes; si un día no se abrió la app, se avisa al abrirla
       const [a, m, d] = String(e.f).split("-").map(Number), dias = Math.round((new Date(a, m - 1, d) - new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())) / 864e5);
+      if (e.hoy && dias === 0) { const kh = e.f + "|" + e.t + k + "|hoy"; if (!ya.has(kh)) out.push({key: kh, titulo: "Hoy: " + e.t, cuerpo: e.c || ""}); return; }
       const n = e.av.filter(x => dias >= 1 && dias <= x).sort((x, y) => x - y)[0]; if (!n) return;
-      const key = e.f + "|" + e.t + "|antes" + n; if (ya.has(key)) return;
+      const key = e.f + "|" + e.t + k + "|antes" + n; if (ya.has(key)) return;
       out.push({key, titulo: (dias === 1 ? "Mañana: " : "En " + dias + " días: ") + e.t, cuerpo: e.c || ""}); return;
     }
     const cuando = e.f === hoy ? "hoy" : e.f === man ? "man" : "";
-    if (!cuando) return;
-    const key = e.f + "|" + e.t + "|" + cuando; if (ya.has(key)) return;
+    if (!cuando || (e.solo && cuando !== "hoy")) return;
+    const key = e.f + "|" + e.t + k + "|" + cuando; if (ya.has(key)) return;
     out.push({key, titulo: (cuando === "hoy" ? "Hoy: " : "Mañana: ") + e.t, cuerpo: e.c || ""});
   });
   return out;
 }
 async function leerAv(n, def) { try { const r = await (await caches.open(AV)).match(n); return r ? await r.json() : def; } catch (e) { return def; } }
 async function guardarAv(n, v) { const c = await caches.open(AV); await c.put(n, new Response(JSON.stringify(v), {headers: {"content-type": "application/json"}})); }
+async function appVisible() { try { return (await self.clients.matchAll({type: "window", includeUncontrolled: true})).some(c => c.visibilityState === "visible"); } catch (e) { return false; } }
 async function revisarAvisos() {
   if (!self.Notification || Notification.permission !== "granted") return;
-  const ev = await leerAv("avisos.json", []), ya = await leerAv("avisados.json", []), p = avisosPendientes(ev, new Date(), ya);
+  const ev = await leerAv("avisos.json", []), ya = await leerAv("avisados.json", []), visible = await appVisible(), p = avisosPendientes(ev, new Date(), ya, visible);
   for (const a of p) { await self.registration.showNotification(a.titulo, {body: a.cuerpo, icon: "icon-192.png", badge: "icon-192.png", tag: a.key}); ya.push(a.key); }
   if (p.length) await guardarAv("avisados.json", ya.slice(-80));
 }
