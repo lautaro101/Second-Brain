@@ -1,8 +1,10 @@
 /* ÚNICO lugar donde cambiás la versión de Second Brain.
    Para publicar algo nuevo: cambiá APP_VERSION y agregá arriba de APP_HISTORIAL una línea de qué cambió. Subí este archivo junto con index.html y sw.js. */
-self.APP_VERSION = "1.11.2";
-self.APP_NOVEDADES = "Se recuperaron los módulos Estudio, Programación y Finanzas, que no aparecían en la lista de módulos. Tus datos guardados no se tocan.";
+self.APP_VERSION = "1.11.4";
+self.APP_NOVEDADES = "Tareas: ahora cada tarea con fecha tiene un nivel (Urgente si vence hoy o venció, Prioridad cuando se acerca, Próxima hasta 7 días antes) y se ordenan por nivel. Pasan a Prioridad 3 días antes por defecto; el número general lo cambiás arriba y cada tarea puede tener su propio número.";
 self.APP_HISTORIAL = [
+  ["1.11.4", "Tareas: ahora cada tarea con fecha tiene un nivel (Urgente si vence hoy o venció, Prioridad cuando se acerca, Próxima hasta 7 días antes) y se ordenan por nivel. Pasan a Prioridad 3 días antes por defecto; el número general lo cambiás arriba y cada tarea puede tener su propio número."],
+  ["1.11.3", "Ahora sí están los módulos Estudio, Programación y Finanzas: aparecen en Módulos y en Ajustes → «Módulos activos» y se pueden prender y apagar. Tus datos guardados no se tocan (la app hace una copia automática al actualizar)."],
   ["1.11.2", "Se recuperaron los módulos Estudio, Programación y Finanzas, que no aparecían en la lista de módulos. Tus datos guardados no se tocan."],
   ["1.11.1", "Second Brain y Mi Recibo ahora se pueden instalar y usar a la vez desde el mismo sitio sin pisarse: cada una tiene su propia identidad, su copia sin conexión y sus datos. Si ya la tenías instalada, desinstalala y volvé a instalarla una vez para que quede separada de la otra."],
   ["1.11.0", "Pantalla de entrada con el logo animado y una barra de carga, igual que la de Mi Recibo: sale una vez por apertura de la app (se cierra sola o al tocarla) y, si la página tarda en cargar, te avisa y te deja reintentar."],

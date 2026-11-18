@@ -23,7 +23,7 @@ Los datos de cada módulo viven en **IndexedDB** (base `second_brain`, clave `sb
 Ajustes → «Sincronizar PC y celu». En PC con Chrome/Edge/Brave se vincula un archivo y se actualiza solo; en el celu se guarda/comparte el `.json` a Drive u OneDrive y en el otro dispositivo se carga. Se junta por nota, tarea, hábito o día de diario (gana el último cambio) y los borrados viajan. Para que un módulo nuevo se sincronice fino, declará `sync: [{k: "propiedad", orden: "desc", t: x => x.m}]`; sin eso se junta entero (gana el modificado más tarde).
 
 ## Tareas
-Vista lista o tablero (Pendiente / En curso / Hecha); la vista se recuerda por dispositivo. «Hecha» pasa por `completar`/`deshacer`, así que las repeticiones funcionan igual desde el tablero. Cada cambio de columna anota `m` (último cambio) para que la sincronización lo lleve.
+Prioridad por fecha: Urgente (vence hoy o venció), Prioridad (faltan N días o menos: 3 por defecto, general en cada dispositivo y propio por tarea con el campo «a»), Próxima (hasta 7 días). Urgentes y en Prioridad salen en Hoy. Vista lista o tablero (Pendiente / En curso / Hecha); la vista se recuerda por dispositivo. «Hecha» pasa por `completar`/`deshacer`, así que las repeticiones funcionan igual desde el tablero. Cada cambio de columna anota `m` (último cambio) para que la sincronización lo lleve.
 
 ## Inbox que se ordena solo
 Reglas «empieza con» / «contiene» (palabras separadas por coma, sin mayúsculas ni tildes, por palabra entera) que mandan lo capturado al módulo que tenga `captura`. Vienen unas básicas (comprar, pagar, llamar → Tareas; idea → Notas; hoy aprendí → Diario), se editan en el Inbox, se pueden apagar y se aplican al capturar o con «Ordenar con las reglas». Se guardan en cada dispositivo, no se sincronizan.
