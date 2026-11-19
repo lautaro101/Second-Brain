@@ -7,7 +7,7 @@ const PREF = "second-brain-";                          // todas las cachés de E
 const V = PREF + "v" + VERSION;
 const BASE = (() => { try { return new URL("./", self.location.href).pathname; } catch (e) { return "/"; } })();   // la carpeta de esta app (por ej. /Second-Brain/): este service worker no toca nada fuera de ella
 const AV = "sb-avisos";                               // aquí se guardan los próximos avisos (no se borra al actualizar)
-const SHELL = ["./", "./version.js", "./core.js", "./sync.js", "./seguridad.js", "./instalar.js", "./modulos/lista.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].concat((self.SB_ARCHIVOS || []).map(f => "./" + f));
+const SHELL = ["./", "./version.js", "./fuentes.css", "./core.js", "./sync.js", "./seguridad.js", "./instalar.js", "./modulos/lista.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].concat((self.SB_ARCHIVOS || []).map(f => "./" + f));
 const fresco = u => /\/(index\.html|version\.js)?$/.test(u.pathname);   // la página y version.js: siempre se pide a internet primero
 
 self.addEventListener("install", e => {

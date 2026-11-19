@@ -71,13 +71,20 @@ const idbUno = (db, k, v) => new Promise((ok, no) => {
 const lsClaves = () => { const a = []; for (let i = 0; i < LS.length; i++) { const k = LS.key(i); if (k && DATOS.test(k)) a.push(k); } return a; };
 
 /* Copia automática de todos los datos cuando cambia la versión de la app (se guardan las últimas 3). Corre antes de cargar los módulos. */
+const guardarCopias = a => { a = a.slice(0, 3);
+  if (IDB) poner("sb_copias", a);
+  else for (;;) { try { LS.setItem("sb_copias", JSON.stringify(a)); MEM.set("sb_copias", a); break; } catch (e) { if (a.length <= 1) break; a.pop(); } } };
+SB.guardarCopias = guardarCopias;
+const claveGuardada = () => { try { const s = JSON.parse(LS.getItem("sb_seg")); return !!(s && s.clave); } catch (e) { return false; } };
 const copia = motivo => { try {
   const d = {}; MEM.forEach((v, k) => { if (USUARIO.test(k)) d[k] = JSON.parse(JSON.stringify(v)); }); if (!Object.keys(d).length) return;
-  let a = leer("sb_copias", []); if (!Array.isArray(a)) a = []; if (a[0] && JSON.stringify(a[0].d) === JSON.stringify(d)) return;
-  a.unshift({t: Date.now(), v: window.APP_VERSION, m: motivo, d}); a = a.slice(0, 3);
-  if (IDB) poner("sb_copias", a);
-  else for (;;) { try { LS.setItem("sb_copias", JSON.stringify(a)); MEM.set("sb_copias", a); break; } catch (e) { if (a.length <= 1) break; a.pop(); } }
+  let a = leer("sb_copias", []); if (!Array.isArray(a)) a = []; if (a[0] && a[0].d && JSON.stringify(a[0].d) === JSON.stringify(d)) return;
+  const it = {t: Date.now(), v: window.APP_VERSION, m: motivo, d};
+  if (claveGuardada()) { SB.copiaPend = it; return; }   // con el cifrado activo la copia nunca se escribe en claro: seguridad.js la cifra y recién ahí se guarda
+  a.unshift(it); guardarCopias(a);
 } catch (e) {} };
+/* Si el cifrado está activo pero seguridad.js no cargó, la copia pendiente se guarda igual (en claro) para no perder la red de seguridad de la actualización. */
+SB.volcarCopia = () => { try { const it = SB.copiaPend; if (!it) return; SB.copiaPend = null; let a = leer("sb_copias", []); if (!Array.isArray(a)) a = []; a.unshift(it); guardarCopias(a); } catch (e) {} };
 function alCambiarVersion() { try { const prev = LS.getItem("sb_ult_version");   // si cambió la versión: copia de los datos y novedades pendientes de mostrar (una sola vez)
   if (prev !== window.APP_VERSION) { copia("al pasar a la versión " + window.APP_VERSION); LS.setItem("sb_ult_version", window.APP_VERSION); LS.setItem("sb_nov_pend", JSON.stringify({de: prev || ""})); } } catch (e) {} }
 
@@ -156,7 +163,7 @@ SB.registrar = function (m) {
   } catch (e) { SB.fallos[(m && m.id) || "módulo sin id"] = e.message; delete DATA[m && m.id]; }
 };
 /* Quien quiera enterarse de que algo se guardó (la sincronización) se suma a SB.alGuardar. «silencioso» sirve para guardar lo que llegó de otro dispositivo sin volver a avisar. */
-SB.alGuardar = []; SB.alArrancar = []; SB.secciones = [];
+SB.alGuardar = []; SB.alArrancar = []; SB.alCambio = []; SB.secciones = [];   // alCambio: se entera de TODO guardado, también de lo que llega de otro dispositivo (silencioso)
 /* Cifrado y copias (los hace seguridad.js). Si hay una clave guardada y seguridad.js no cargó, NO se guarda sin cifrar. */
 SB.mostrarNovedades = () => mostrarNovedades();
 SB.sellar = t => { if (SB.seg) return SB.seg.sellar(t); try { const s = JSON.parse(localStorage.getItem("sb_seg")); if (s && s.clave) return Promise.reject(new Error("El cifrado no pudo cargar, así que no se guarda sin cifrar.")); } catch (e) {} return Promise.resolve(t); };
@@ -165,6 +172,7 @@ SB.copiaHecha = () => { if (SB.seg) SB.seg.copiaHecha(); };
 const avisarGuardado = id => SB.alGuardar.forEach(f => { try { f(id); } catch (e) {} });
 let tAv; SB.guardar = (id, silencioso) => {
   const m = SB.mods[id]; if (!m) return; poner("sb_m_" + id, {v: m.esquema, d: DATA[id]});
+  SB.alCambio.forEach(f => { try { f(id, !!silencioso); } catch (e) {} });
   if (!silencioso) avisarGuardado(id);
   clearTimeout(tAv); tAv = setTimeout(enviarAvisos, 1500);
 };
@@ -218,11 +226,55 @@ const rutear = texto => { const r = reglaPara(texto), m = r && SB.mods[r.d]; if 
 const ordenarInbox = () => { const resto = []; let n = 0; inbox().slice().forEach(x => { if (rutear(x.t)) n++; else resto.push(x); }); if (n) ponerInbox(resto); return n; };
 SB.reglas = {regla: reglaPara, rutear, ordenar: ordenarInbox, lista: reglas, auto: () => cfg().auto !== false};
 const reglasHtml = () => { const rs = reglas(), d = destinos(), off = cfg().off;
-  return `<section class="card"><h3>🪄 Ordenar solo</h3><label class="fila"><input type="checkbox" data-c="auto"${cfg().auto === false ? "" : " checked"}><span class="tx">Ordenar al capturar<small>Si lo que escribís coincide con una regla, va directo a su módulo</small></span></label>
+  return `<section class="card"><h3>${ic("🪄")}Ordenar solo</h3><label class="fila"><input type="checkbox" data-c="auto"${cfg().auto === false ? "" : " checked"}><span class="tx">Ordenar al capturar<small>Si lo que escribís coincide con una regla, va directo a su módulo</small></span></label>
     ${rs.map(r => { const m = SB.mods[r.d]; return `<div class="fila"><span class="tx">${r.tipo === "e" ? "Empieza con" : "Contiene"} «${esc(r.p)}»<small>→ ${m ? m.icono + " " + esc(m.captura ? m.captura.etiqueta : m.nombre) + (off.includes(r.d) ? " (módulo apagado)" : "") : "módulo no disponible"}</small></span><button class="x" data-a="r-del" data-id="${esc(r.id)}" aria-label="Borrar regla">✕</button></div>`; }).join("")}
     <form data-f="regla"><div class="fila-b"><select name="tipo" aria-label="Tipo de regla"><option value="e">Empieza con</option><option value="c">Contiene</option></select><select name="d" aria-label="Destino">${d.map(m => `<option value="${esc(m.id)}">${m.icono} ${esc(m.captura.etiqueta)}</option>`).join("")}</select></div>
       <input name="p" placeholder="Palabras, separadas por coma (ej: comprar, pagar)" required autocomplete="off"><button class="pri">Agregar regla</button></form>
     <div class="fila-b"><button data-a="r-base">Volver a las reglas básicas</button></div></section>`; };
+
+/* ---------- Buscador rápido (Ctrl+K): busca en todo y también sirve para ir a un módulo ---------- */
+function abrirBuscador() {
+  if (SB.bloqueado || $("kbar")) return;
+  const o = document.createElement("div"); o.id = "kbar"; o.setAttribute("role", "dialog"); o.setAttribute("aria-label", "Buscar en todo");
+  o.innerHTML = `<div class="kb"><input type="search" id="kq" placeholder="Buscar o ir a…" autocomplete="off" aria-label="Buscar o ir a"><div id="kr"></div><p class="kp"><kbd>↑</kbd> <kbd>↓</kbd> moverte · <kbd>Enter</kbd> abrir · <kbd>Esc</kbd> cerrar</p></div>`;
+  document.body.appendChild(o);
+  const q = o.querySelector("input"), r = o.querySelector("#kr"); let fs = [], sel = 0;
+  const cerrar = () => { document.removeEventListener("keydown", tecla, true); o.remove(); };
+  const abrir = f => { if (!f) return; cerrar(); if (location.hash === f.ir) pintar(); else location.hash = f.ir; };
+  const lista = () => { const t = q.value.trim(), nt = norm(t), out = [];
+    if (t.length >= 2) {
+      inbox().filter(x => norm(x.t).includes(nt)).slice(0, 4).forEach(x => out.push({ir: "#/inbox", t: x.t, s: "Inbox", i: "📥"}));
+      activos().forEach(m => { const rs = seguro(m, "buscar", t); if (Array.isArray(rs)) rs.slice(0, 5).forEach(x => out.push({ir: x.ir || "#/" + m.id, t: x.t, s: x.s ? m.nombre + " · " + x.s : m.nombre, i: m.icono})); });
+    }
+    [["#/hoy", "🏠", "Hoy"], ["#/mas", "▦", "Módulos"], ["#/inbox", "📥", "Inbox"], ["#/semana", "🗓️", "Revisión semanal"], ["#/ajustes", "⚙️", "Ajustes"]].concat(activos().map(m => ["#/" + m.id, m.icono, m.nombre]))
+      .filter(n => !nt || norm(n[2]).includes(nt)).slice(0, nt ? 4 : 14).forEach(n => out.push({ir: n[0], t: n[2], s: "Ir a", i: n[1]}));
+    return out.slice(0, 24); };
+  const pintarL = () => { fs = lista(); sel = Math.min(sel, Math.max(0, fs.length - 1));
+    r.innerHTML = fs.length ? fs.map((f, i) => `<a class="kf${i === sel ? " on" : ""}" href="${esc(f.ir)}" data-i="${i}"><span class="ic">${esc(f.i)}</span><span class="tx"><b>${esc(f.t)}</b><small>${esc(f.s)}</small></span></a>`).join("") : `<p class="vacio">Sin resultados.</p>`; };
+  const mover = d => { if (!fs.length) return; sel = (sel + d + fs.length) % fs.length; pintarL(); const a = r.querySelector(".on"); if (a && a.scrollIntoView) a.scrollIntoView({block: "nearest"}); };
+  const tecla = e => { if (e.key === "Escape") { e.preventDefault(); cerrar(); } else if (e.key === "ArrowDown") { e.preventDefault(); mover(1); } else if (e.key === "ArrowUp") { e.preventDefault(); mover(-1); } else if (e.key === "Enter") { e.preventDefault(); abrir(fs[sel]); } };
+  document.addEventListener("keydown", tecla, true);
+  q.oninput = () => { sel = 0; pintarL(); };
+  r.onclick = e => { const a = e.target.closest("[data-i]"); if (a) { e.preventDefault(); abrir(fs[+a.dataset.i]); } };
+  o.onclick = e => { if (e.target === o) cerrar(); };
+  pintarL(); q.focus();
+}
+SB.buscador = abrirBuscador;
+
+/* ---------- Apariencia (tema y tamaño de letra; se guarda solo en este dispositivo) ---------- */
+const ic = i => `<span class="ic">${i}</span>`;
+const ui = () => { try { const u = JSON.parse(localStorage.getItem("sb_ui") || "{}"); return {tema: u.tema === "claro" || u.tema === "oscuro" ? u.tema : "auto", letra: u.letra === 1 || u.letra === 2 ? u.letra : 0}; } catch (e) { return {tema: "auto", letra: 0}; } };
+function aplicarUI() { try {
+  const u = ui(), h = document.documentElement;
+  if (u.tema === "auto") h.removeAttribute("data-tema"); else h.setAttribute("data-tema", u.tema);
+  if (u.letra) h.setAttribute("data-letra", u.letra); else h.removeAttribute("data-letra");
+  const osc = u.tema === "oscuro" || (u.tema === "auto" && window.matchMedia && matchMedia("(prefers-color-scheme:dark)").matches), m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute("content", osc ? "#0f161d" : "#eef1ea");
+} catch (e) {} }
+SB.ui = {leer: ui, poner: o => { try { localStorage.setItem("sb_ui", JSON.stringify(Object.assign(ui(), o))); } catch (e) {} aplicarUI(); }};
+const segHtml = (a, vals, act) => `<div class="seg" role="group">${vals.map(([v, t]) => `<button type="button" data-a="${a}" data-v="${v}" aria-pressed="${String(v) === String(act)}">${t}</button>`).join("")}</div>`;
+const apariencia = () => { const u = ui();
+  return `<section class="card"><h3>${ic("🎨")}Apariencia</h3><p class="sub">Tema</p>${segHtml("tema", [["auto", "Automático"], ["claro", "Claro"], ["oscuro", "Oscuro"]], u.tema)}<p class="sub">Tamaño de letra</p>${segHtml("letra", [[0, "Normal"], [1, "Grande"], [2, "Muy grande"]], u.letra)}<small>Se guarda solo en este dispositivo.</small></section>`; };
 
 /* ---------- Pantallas del núcleo ---------- */
 let HOYITEMS = [];
@@ -230,15 +282,20 @@ const hoyFila = (x, i) => `<div class="fila">${x.tocar ? `<button class="chk${x.
   <div class="tx${x.hecho ? " hecha" : ""}"${x.ir ? ` data-a="ir" data-i="${i}"` : ""}><span>${esc(x.t)}</span>${x.s ? `<small>${esc(x.s)}</small>` : ""}</div></div>`;
 function pHoy(el) {
   const f = new Date(), fecha = f.toLocaleDateString("es-AR", {weekday: "long", day: "numeric", month: "long"}), inb = inbox();
-  HOYITEMS = []; let h = `<h2 class="fecha">${esc(fecha)}</h2>`, hay = false;
+  HOYITEMS = []; let h = "", hay = false;
   if (inb.length) { hay = true; h += `<a class="card enlace" href="#/inbox"><b>📥 Inbox</b><small>${inb.length} sin ordenar</small></a>`; }
   if (f.getDay() === 0) { hay = true; h += `<a class="card enlace" href="#/semana"><b>🗓️ Revisión semanal</b><small>Hoy toca mirar cómo te fue</small></a>`; }
   activos().forEach(m => {
     const it = seguro(m, "hoy"); if (!Array.isArray(it) || !it.length) return; hay = true;
-    h += `<section class="card"><h3>${m.icono} ${esc(m.nombre)}</h3>${it.map(x => { HOYITEMS.push(x); return hoyFila(x, HOYITEMS.length - 1); }).join("")}</section>`;
+    h += `<section class="card"><h3>${ic(m.icono)}${esc(m.nombre)}</h3>${it.map(x => { HOYITEMS.push(x); return hoyFila(x, HOYITEMS.length - 1); }).join("")}</section>`;
   });
   if (!hay) h += `<p class="vacio">No hay nada pendiente para hoy. Anotá algo con el botón ＋.</p>`;
-  el.innerHTML = h;
+  const hr = f.getHours(), sal = hr < 6 ? "Buenas noches" : hr < 13 ? "Buen día" : hr < 20 ? "Buenas tardes" : "Buenas noches";
+  const tot = HOYITEMS.filter(x => x.tocar).length, ok = HOYITEMS.filter(x => x.tocar && x.hecho).length, falta = tot - ok;
+  const hero = `<section class="hero${tot ? "" : " libre"}"><p class="sal">${sal}</p><h2>${esc(fecha)}</h2>`
+    + (tot ? `<div class="num"><b>${falta}</b><span>${falta === 1 ? "cosa por hacer hoy" : falta ? "cosas por hacer hoy" : "todo hecho por hoy"}</span></div><div class="split" role="progressbar" aria-valuemin="0" aria-valuemax="${tot}" aria-valuenow="${ok}"><i style="width:${Math.round(ok / tot * 100)}%"></i></div><p class="pie"><span>${ok} de ${tot} hechas</span>${inb.length ? `<span>📥 ${inb.length} en el Inbox</span>` : ""}</p>`
+      : `<div class="num"><b>${hay ? "Tranqui" : "Día libre"}</b></div>${inb.length ? `<p class="pie"><span>📥 ${inb.length} en el Inbox</span></p>` : ""}`) + `</section>`;
+  el.innerHTML = hero + h;
   eventos(el, {a: (a, n) => { const x = HOYITEMS[+n.dataset.i]; if (!x) return; if (a === "ir") location.hash = x.ir; else { try { x.tocar(); } catch (e) { SB.fallos.hoy = e.message; } pintar(); } }});
 }
 function pInbox(el) {
@@ -262,8 +319,8 @@ function pBuscar(el) {
   const q = $("q"), res = $("res");
   const llenar = () => { const t = q.value.trim(); if (t.length < 2) { res.innerHTML = `<p class="vacio">Escribí al menos 2 letras.</p>`; return; }
     let h = ""; const inb = inbox().filter(x => norm(x.t).includes(norm(t)));
-    if (inb.length) h += `<section class="card"><h3>📥 Inbox</h3>${inb.map(x => `<a class="item" href="#/inbox">${esc(x.t)}</a>`).join("")}</section>`;
-    activos().forEach(m => { const r = seguro(m, "buscar", t); if (Array.isArray(r) && r.length) h += `<section class="card"><h3>${m.icono} ${esc(m.nombre)}</h3>${r.slice(0, 15).map(x => `<a class="item" href="${esc(x.ir || "#/" + m.id)}"><b>${esc(x.t)}</b>${x.s ? `<small>${esc(x.s)}</small>` : ""}</a>`).join("")}</section>`; });
+    if (inb.length) h += `<section class="card"><h3>${ic("📥")}Inbox</h3>${inb.map(x => `<a class="item" href="#/inbox">${esc(x.t)}</a>`).join("")}</section>`;
+    activos().forEach(m => { const r = seguro(m, "buscar", t); if (Array.isArray(r) && r.length) h += `<section class="card"><h3>${ic(m.icono)}${esc(m.nombre)}</h3>${r.slice(0, 15).map(x => `<a class="item" href="${esc(x.ir || "#/" + m.id)}"><b>${esc(x.t)}</b>${x.s ? `<small>${esc(x.s)}</small>` : ""}</a>`).join("")}</section>`; });
     res.innerHTML = h || `<p class="vacio">Sin resultados.</p>`; };
   q.oninput = llenar; llenar(); if (window.matchMedia("(min-width:900px)").matches) q.focus();
 }
@@ -273,8 +330,8 @@ function pMas(el) {
 }
 function pSemana(el) {
   let h = ""; const n = inbox().length;
-  activos().forEach(m => { const r = seguro(m, "semana"); if (Array.isArray(r) && r.length) h += `<section class="card"><h3>${m.icono} ${esc(m.nombre)}</h3>${r.map(x => `<p>${esc(x)}</p>`).join("")}</section>`; });
-  el.innerHTML = `<section class="card"><h3>📥 Inbox</h3><p>${n ? n + " cosas sin ordenar: ordenalas antes de arrancar la semana." : "Inbox vacío."}</p></section>${h}`;
+  activos().forEach(m => { const r = seguro(m, "semana"); if (Array.isArray(r) && r.length) h += `<section class="card"><h3>${ic(m.icono)}${esc(m.nombre)}</h3>${r.map(x => `<p>${esc(x)}</p>`).join("")}</section>`; });
+  el.innerHTML = `<section class="card"><h3>${ic("📥")}Inbox</h3><p>${n ? n + " cosas sin ordenar: ordenalas antes de arrancar la semana." : "Inbox vacío."}</p></section>${h}`;
 }
 function enviarAvisos() { try {
   const ev = []; activos().forEach(m => { const a = seguro(m, "avisos"); if (Array.isArray(a)) ev.push(...a); });
@@ -282,14 +339,14 @@ function enviarAvisos() { try {
 } catch (e) {} }
 function pAjustes(el) {
   const c = cfg(), fal = Object.keys(SB.fallos), cps = leer("sb_copias", []);
-  el.innerHTML = `<section class="card"><h3>Módulos activos</h3>${SB.orden.map(id => { const m = SB.mods[id]; return `<label class="fila"><input type="checkbox" data-c="mod" data-id="${esc(id)}" ${c.off.includes(id) ? "" : "checked"}><span class="tx">${m.icono} ${esc(m.nombre)}<small>esquema de datos v${m.esquema}</small></span></label>`; }).join("")}</section>
+  el.innerHTML = apariencia() + `<section class="card"><h3>Módulos activos</h3>${SB.orden.map(id => { const m = SB.mods[id]; return `<label class="fila"><input type="checkbox" data-c="mod" data-id="${esc(id)}" ${c.off.includes(id) ? "" : "checked"}><span class="tx">${m.icono} ${esc(m.nombre)}<small>esquema de datos v${m.esquema}</small></span></label>`; }).join("")}</section>
   ${fal.length ? `<section class="card aviso-f"><h3>Con problemas</h3>${fal.map(k => `<p>${esc(k)}: ${esc(SB.fallos[k])}</p>`).join("")}<small>Los demás módulos siguen funcionando.</small></section>` : ""}
   <section class="card"><h3>Avisos</h3><div class="fila-b"><button data-a="avisos">Activar avisos</button><button data-a="prueba">Probar</button></div></section>
   <div id="ext"></div>
   <section class="card"><h3>Copia de seguridad</h3><div class="fila-b"><button data-a="exportar">Descargar copia</button><label class="btn">Restaurar de archivo<input type="file" accept="application/json" hidden data-c="importar"></label></div>
-  ${cps.length ? `<small>Copias automáticas (al actualizar): ${cps.map((x, i) => `<a href="#" data-a="restaurar" data-i="${i}">v${esc(x.v)} · ${new Date(x.t).toLocaleDateString("es-AR")}</a>`).join(" · ")}</small>` : ""}</section>
+  ${cps.length ? `<small>Copias automáticas (al actualizar): ${cps.map((x, i) => `<a href="#" data-a="restaurar" data-i="${i}">v${esc(x.v)} · ${new Date(x.t).toLocaleDateString("es-AR")}${x.c ? " 🔒" : ""}</a>`).join(" · ")}</small>` : ""}</section>
   <section class="card"><h3>Espacio</h3><p class="ayuda" id="espacio">Calculando…</p></section>
-  <section class="card"><h3>Atajos en PC</h3><p><b>N</b> capturar · <b>/</b> buscar · <b>H</b> Hoy · <b>Esc</b> cerrar · <b>Ctrl+Enter</b> guardar en el Inbox</p></section>
+  <section class="card"><h3>Atajos en PC</h3><p><b>N</b> capturar · <b>Ctrl+K</b> buscar o ir a cualquier lado · <b>/</b> buscar · <b>H</b> Hoy · <b>Esc</b> cerrar · <b>Ctrl+Enter</b> guardar en el Inbox</p></section>
   <section class="card"><h3>Para después</h3>${(self.SB_PARA_DESPUES || []).map(x => `<p><b>${esc(x[0])}</b> <small>${esc(x[1])}</small></p>`).join("")}</section>
   <section class="card"><h3>Versión ${esc(window.APP_VERSION)}</h3><div class="fila-b"><button data-a="buscarUpd">Buscar actualizaciones</button></div><small id="ultUpd">${leer("sb_ub", 0) ? "Última búsqueda: " + new Date(leer("sb_ub", 0)).toLocaleString("es-AR") : "Todavía no buscó actualizaciones"}</small>${(self.APP_HISTORIAL || []).map(x => `<p><b>${esc(x[0])}</b> <small>${esc(x[1])}</small></p>`).join("")}</section>`;
   const ext = $("ext"); SB.secciones.forEach(f => { try { const d = document.createElement("div"); ext.appendChild(d); f(d); } catch (e) { SB.fallos["ajustes"] = e.message; } });
@@ -299,7 +356,8 @@ function pAjustes(el) {
   eventos(el, {
     c: (a, n, e) => { if (a === "mod") { const k = cfg(); k.off = k.off.filter(x => x !== n.dataset.id); if (!n.checked) k.off.push(n.dataset.id); poner("sb_cfg", k); pintar(); }
       if (a === "importar" && n.files[0]) { const r = new FileReader(); r.onload = async () => { try { let d; try { d = JSON.parse(await SB.abrirTexto(r.result, true)); } catch (x) { if (x instanceof SyntaxError) d = null; else throw x; } if (!d || !d.sb) throw new Error("Ese archivo no es una copia de Second Brain."); if (confirm("Se reemplazan los datos de este dispositivo por los del archivo. ¿Seguro?")) restaurar(d.sb); } catch (x) { alert(x && x.message ? x.message : "Ese archivo no es una copia de Second Brain."); } }; r.readAsText(n.files[0]); } },
-    a: (a, n, e) => { if (a === "restaurar") { e.preventDefault(); const x = cps[+n.dataset.i]; if (x && confirm("Volver a los datos del " + new Date(x.t).toLocaleDateString("es-AR") + "?")) restaurar(x.d); }
+    a: (a, n, e) => { if (a === "tema" || a === "letra") { SB.ui.poner({[a]: a === "tema" ? n.dataset.v : +n.dataset.v}); return pintar(); }
+      if (a === "restaurar") { e.preventDefault(); const x = cps[+n.dataset.i]; if (x && confirm("Volver a los datos del " + new Date(x.t).toLocaleDateString("es-AR") + "?")) (x.c ? SB.abrirTexto(JSON.stringify(x.c), true).then(t => { const d = JSON.parse(t); if (d && d.cifrado === 1) throw new Error("El cifrado no pudo cargar, así que no se puede abrir esta copia."); return d; }) : Promise.resolve(x.d)).then(restaurar).catch(err => alert(err && err.message ? err.message : "No se pudo abrir la copia.")); }
       if (a === "exportar") { SB.sellar(JSON.stringify({app: "second-brain", v: window.APP_VERSION, sb: SB.almacen.usuario()})).then(t => { const b = new Blob([t], {type: "application/json"}), u = URL.createObjectURL(b), l = document.createElement("a"); l.href = u; l.download = "second-brain-" + ymd() + ".json"; l.click(); setTimeout(() => URL.revokeObjectURL(u), 3000); SB.copiaHecha(); }).catch(x => alert("No se pudo guardar la copia: " + x.message)); }
       if (a === "avisos") { if (!window.Notification) return alert("Este navegador no permite avisos."); Notification.requestPermission().then(p => { SB.aviso(p === "granted" ? "Avisos activados" : "Los avisos quedaron bloqueados");
         if (p === "granted") navigator.serviceWorker.ready.then(r => r.periodicSync && r.periodicSync.register("avisos", {minInterval: 864e5})).catch(() => {}).then(enviarAvisos); }); }
@@ -311,24 +369,33 @@ function pAjustes(el) {
 
 /* ---------- Router ---------- */
 const PANT = {hoy: pHoy, inbox: pInbox, buscar: pBuscar, mas: pMas, semana: pSemana, ajustes: pAjustes};
-const TIT = {hoy: "Hoy", inbox: "📥 Inbox", buscar: "🔍 Buscar", mas: "Módulos", semana: "🗓️ Revisión semanal", ajustes: "⚙️ Ajustes"};
+const TIT = {hoy: ["🏠", "Hoy"], inbox: ["📥", "Inbox"], buscar: ["🔍", "Buscar"], mas: ["▦", "Módulos"], semana: ["🗓️", "Revisión semanal"], ajustes: ["⚙️", "Ajustes"]};
 function ruta() { const m = /^#\/([^\/]+)(?:\/(.*))?$/.exec(location.hash); return {id: m ? m[1] : "hoy", sub: m && m[2] ? decodeURIComponent(m[2]) : ""}; }
 function pintar() {
   if (SB.bloqueado) return;   // con el PIN puesto no se dibuja nada hasta desbloquear
   const r = ruta(), app = $("app"), m = SB.mods[r.id] && !cfg().off.includes(r.id) ? SB.mods[r.id] : null, f = PANT[r.id] || (m && ((el, s) => m.pantalla(el, s)));
   if (!f) { location.hash = "#/hoy"; return; }
-  $("top").textContent = m ? m.icono + " " + m.nombre : TIT[r.id];
+  const tt = m ? [m.icono, m.nombre] : TIT[r.id];
+  $("top").innerHTML = `<span class="ic">${esc(tt[0])}</span><span class="tt">${esc(tt[1])}</span>`;
   document.querySelectorAll("#nav [data-n]").forEach(a => a.classList.toggle("on", a.dataset.n === (PANT[r.id] ? r.id : "mas")));
+  if (app.dataset.r !== r.id + "/" + r.sub) { app.classList.add("nueva"); clearTimeout(pintar.t); pintar.t = setTimeout(() => app.classList.remove("nueva"), 600); }   // la animación de entrada solo cuando cambiás de pantalla
+  app.dataset.r = r.id + "/" + r.sub;
   app.dataset.p = PANT[r.id] ? r.id : "mod"; app.onclick = app.onchange = app.onsubmit = null;
   try { f(app, r.sub); } catch (e) { SB.fallos[r.id] = e.message; app.innerHTML = `<div class="card aviso-f"><b>Este apartado falló:</b> ${esc(e.message)}<br><small>Los demás siguen andando.</small></div>`; }
   window.scrollTo(0, 0);
 }
 SB.arrancar = function () {
+  aplicarUI();
+  if (SB.copiaPend && !SB.seg) SB.volcarCopia();
   try { const s = JSON.parse(localStorage.getItem("sb_seg")); if (!SB.seg && s && s.pin) { SB.bloqueado = true; $("app").textContent = "El bloqueo con PIN no pudo cargar, así que por seguridad la app no se abre. Recargá la página."; } } catch (e) {}   // si falla el bloqueo, falla cerrado
-  $("nav").innerHTML = `<a href="#/hoy" data-n="hoy"><i>🏠</i>Hoy</a><a href="#/mas" data-n="mas"><i>▦</i>Módulos</a><button id="fab" aria-label="Capturar rápido"><span>＋</span><span class="fl">Capturar <kbd>N</kbd></span></button><a href="#/buscar" data-n="buscar"><i>🔍</i>Buscar</a><a href="#/ajustes" data-n="ajustes"><i>⚙️</i>Ajustes</a>`;
+  const I = {hoy: '<path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>', mas: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8"/>', buscar: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>', ajustes: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>'};
+  const ni = k => `<span class="ni"><svg viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg></span>`;
+  const marca = `<div class="marca"><svg viewBox="110 120 292 308" aria-hidden="true"><g stroke="#1c3556" stroke-width="14" stroke-linecap="round"><path d="M256 158 148 266M256 158l108 108M148 266h216M148 266l108 108M364 266 256 374M148 266l12 128M364 266l-12 128M160 394l96-20M256 374l96 20"/></g><g fill="#2a7a5c"><circle cx="148" cy="266" r="24"/><circle cx="364" cy="266" r="24"/><circle cx="256" cy="374" r="24"/><circle cx="160" cy="394" r="24"/><circle cx="352" cy="394" r="24"/></g><circle cx="256" cy="158" r="32" fill="#1c3556"/></svg>Second Brain</div>`;
+  $("nav").innerHTML = marca + `<a href="#/hoy" data-n="hoy">${ni("hoy")}<span>Hoy</span></a><a href="#/mas" data-n="mas">${ni("mas")}<span>Módulos</span></a><button id="fab" aria-label="Capturar rápido"><span>＋</span><span class="fl">Capturar <kbd>N</kbd></span></button><a href="#/buscar" data-n="buscar">${ni("buscar")}<span>Buscar</span></a><a href="#/ajustes" data-n="ajustes">${ni("ajustes")}<span>Ajustes</span></a>`;
   $("fab").onclick = abrirCaptura;
   document.addEventListener("keydown", e => {
     if (SB.bloqueado) return;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") { e.preventDefault(); if (!$("kbar")) { const s = $("sheet"); if (s) { s.hidden = true; s.innerHTML = ""; } abrirBuscador(); } return; }
     const t = e.target, escribe = t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName), s = $("sheet");
     if (e.key === "Escape" && !s.hidden) { s.hidden = true; s.innerHTML = ""; return; }
     if (escribe || e.ctrlKey || e.metaKey || e.altKey || !s.hidden) return;

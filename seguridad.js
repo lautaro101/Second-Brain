@@ -70,19 +70,45 @@ async function abrir(texto, pedir) {
   }
   throw new Error(s.clave ? "La clave de este dispositivo no abre ese archivo." : "El archivo está cifrado: activá el cifrado con la misma clave en Ajustes → Seguridad.");
 }
+/* ---------- copias automáticas internas (las que la app guarda sola al actualizar, `sb_copias`) ---------- */
+const leerCopias = () => { const a = A.leer("sb_copias", []); return Array.isArray(a) ? a : []; };
+/* Deja cifradas con la clave de este dispositivo las copias que estén en claro, y la copia nueva que el núcleo dejó pendiente. Devuelve cuántas cifró. */
+async function cifrarCopias() {
+  const s = leerS(); if (!s.clave) return 0;
+  const pend = SB.copiaPend, a = leerCopias().map(x => Object.assign({}, x)); if (pend) a.unshift(Object.assign({}, pend));
+  let n = 0;
+  for (const x of a) if (x && x.d && !x.c) { x.c = await cifrar(JSON.stringify(x.d), s.clave); delete x.d; n++; }
+  if (n) SB.guardarCopias(a);
+  if (pend) SB.copiaPend = null;
+  return n;
+}
+/* Pasa las copias de una clave a otra (hacia = null: las deja en claro). Las que no abre `desde` quedan como están y se cuentan como perdidas. */
+async function recifrarCopias(desde, hacia) {
+  const a = leerCopias().map(x => Object.assign({}, x)); let ok = 0, perdidas = 0;
+  for (const x of a) {
+    if (!x || !x.c) continue;
+    try { const t = await descifrar(x.c, desde); if (hacia) x.c = await cifrar(t, hacia); else { x.d = JSON.parse(t); delete x.c; } ok++; }
+    catch (e) { if (e.clave) perdidas++; else throw e; }
+  }
+  if (ok) SB.guardarCopias(a);
+  return {ok, perdidas};
+}
 const claveValida = c => { if (String(c).length < 8) throw new Error("La clave tiene que tener al menos 8 caracteres."); };
 async function activarCifrado(c) {
   claveValida(c); if (!subtle()) throw new Error(SIN_CRYPTO);
   await cifrar("prueba", c); const s = leerS(); s.clave = String(c); delete s.anterior; guardarS(s);
+  return await cifrarCopias();   // cuántas copias automáticas que estaban en claro se cifraron
 }
 async function cambiarClave(actual, nueva) {
   const s = leerS(); if (!s.clave) throw new Error("El cifrado no está activo.");
   if (String(actual) !== s.clave) throw new Error("La clave actual no es correcta."); claveValida(nueva);
   await cifrar("prueba", nueva); s.anterior = s.clave; s.clave = String(nueva); guardarS(s);
+  const r = await recifrarCopias(String(actual), String(nueva)); await cifrarCopias(); return r;
 }
 async function quitarCifrado(actual) {
   const s = leerS(); if (!s.clave) throw new Error("El cifrado no está activo.");
   if (String(actual) !== s.clave) throw new Error("La clave no es correcta."); s.anterior = s.clave; delete s.clave; guardarS(s);   // la anterior queda para poder reescribir el archivo vinculado sin cifrar
+  return await recifrarCopias(String(actual), null);   // las copias automáticas vuelven a quedar en claro
 }
 
 /* ---------- PIN ---------- */
@@ -191,7 +217,7 @@ function pintarUI() {
     <p class="ayuda">Con un PIN, la app se traba al abrirla y cuando la dejás un rato. Es un candado de pantalla: no cifra lo que está guardado en este dispositivo (eso lo hace la clave de más abajo, para los archivos que salen de acá).</p>
     <form data-f="pin-nuevo">${pn("p1", "PIN (4 a 8 números)")}${pn("p2", "Repetí el PIN")}<button type="submit" class="pri">Activar PIN</button></form>`}</section>
   <section class="card"><h3>🔑 Cifrado de archivos${s.clave ? " · activo" : ""}</h3>${!puede ? `<p class="sy-err">${esc(SIN_CRYPTO)}</p>` : s.clave ? `
-    <p class="ayuda">Los archivos de sincronización y las copias que descargás se guardan cifrados (AES-256). En cada dispositivo tenés que poner la misma clave. Si la perdés, esos archivos no se pueden abrir: no hay forma de recuperarla.</p>
+    <p class="ayuda">Los archivos de sincronización, las copias que descargás y las copias automáticas que la app guarda al actualizar se cifran (AES-256). Lo que usás todos los días en este dispositivo no se cifra. En cada dispositivo tenés que poner la misma clave. Si la perdés, esos archivos no se pueden abrir: no hay forma de recuperarla.</p>
     <details><summary>Cambiar o quitar la clave</summary>
       <form data-f="clave-cambiar">${pw("a", "Clave actual")}${pw("n1", "Clave nueva (mínimo 8 caracteres)", "new-password")}${pw("n2", "Repetí la clave nueva", "new-password")}<button type="submit">Cambiar clave</button></form>
       <form data-f="clave-quitar">${pw("a", "Clave actual")}<button type="submit" class="x">Desactivar cifrado</button></form></details>` : `
@@ -211,13 +237,15 @@ SB.secciones.push(cont => {
         if (a === "pin-nuevo") { igualesO("p1", "p2", "PIN"); await ponerPin(v("p1")); msg("PIN activado."); }
         else if (a === "pin-cambiar") { igualesO("n1", "n2", "PIN"); await cambiarPin(v("a"), v("n1")); msg("PIN cambiado."); }
         else if (a === "pin-quitar") { await quitarPin(v("a")); msg("PIN quitado."); }
-        else if (a === "clave-nueva") { igualesO("c1", "c2", "claves"); await activarCifrado(v("c1")); msg("Cifrado activado. Desde ahora lo que guardes sale cifrado. En tus otros dispositivos activalo con esta misma clave."); }
-        else if (a === "clave-cambiar") { igualesO("n1", "n2", "claves"); await cambiarClave(v("a"), v("n1")); msg("Clave cambiada. Tocá Sincronizar (o guardá el archivo de nuevo) para que quede con la clave nueva, y cargala igual en tus otros dispositivos."); }
-        else if (a === "clave-quitar") { await quitarCifrado(v("a")); msg("Cifrado desactivado. Lo que guardes desde ahora sale sin cifrar; si tenés un archivo vinculado, tocá Sincronizar para reescribirlo."); }
+        else if (a === "clave-nueva") { igualesO("c1", "c2", "claves"); const n = await activarCifrado(v("c1")); msg("Cifrado activado. Desde ahora lo que guardes sale cifrado." + (n ? " También se cifraron " + n + (n === 1 ? " copia automática" : " copias automáticas") + " de este dispositivo." : "") + " En tus otros dispositivos activalo con esta misma clave."); }
+        else if (a === "clave-cambiar") { igualesO("n1", "n2", "claves"); const r = await cambiarClave(v("a"), v("n1")); msg("Clave cambiada. Tocá Sincronizar (o guardá el archivo de nuevo) para que quede con la clave nueva, y cargala igual en tus otros dispositivos." + (r.perdidas ? " " + r.perdidas + (r.perdidas === 1 ? " copia automática estaba cifrada" : " copias automáticas estaban cifradas") + " con una clave anterior y no se pueden abrir." : ""), !!r.perdidas); }
+        else if (a === "clave-quitar") { const r = await quitarCifrado(v("a")); msg("Cifrado desactivado. Lo que guardes desde ahora sale sin cifrar; si tenés un archivo vinculado, tocá Sincronizar para reescribirlo." + (r.perdidas ? " " + r.perdidas + (r.perdidas === 1 ? " copia automática sigue cifrada" : " copias automáticas siguen cifradas") + " con una clave anterior y no se pueden abrir." : ""), !!r.perdidas); }
       } catch (e) { msg(e && e.message ? e.message : "No se pudo.", true); }
     }
   });
 });
+
+SB.alArrancar.push(() => { cifrarCopias().catch(() => {}); });   // si el cifrado está activo, la copia de esta actualización se cifra recién ahora y recién ahora se guarda
 
 /* Al arrancar: bloquea al dejar la app un rato, tapa la pantalla mientras está en segundo plano y revisa si toca recordar la copia. */
 SB.alArrancar.push(() => {
@@ -233,7 +261,7 @@ SB.alArrancar.push(() => {
 });
 
 SB.seg = {sellar, abrir, cifrar, descifrar, esSobre, claveActiva: () => !!leerS().clave, activarCifrado, cambiarClave, quitarCifrado, pinActivo, verificarPin, ponerPin, cambiarPin, quitarPin,
-  bloquear, desbloquear, copiaHecha, debeRecordar, posponer, reescribir: () => SEG.reescribir, borrarTodo, config: SEG};
+  cifrarCopias, recifrarCopias, bloquear, desbloquear, copiaHecha, debeRecordar, posponer, reescribir: () => SEG.reescribir, borrarTodo, config: SEG};
 if (pinActivo()) { SB.bloqueado = true; dibujarBloqueo(); }   // lo primero que se ve al abrir es el PIN
 } catch (e) { SB.fallos["seguridad.js"] = e.message; }
 })();
