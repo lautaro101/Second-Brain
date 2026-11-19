@@ -50,3 +50,6 @@ test("todos los módulos de la lista se registran sin fallos y aparecen en la ap
 test("el service worker arma su lista de archivos a partir de lista.js (así un módulo nuevo funciona sin conexión)", () => {
   assert.match(leer("sw.js"), /SB_ARCHIVOS/); assert.match(leer("index.html"), /modulos\/lista\.js/);
 });
+test("modulos/lista.js lleva la misma versión que version.js (si no, la app avisa que faltan archivos)", () => {
+  const l = {}; l.self = l; vm.createContext(l); vm.runInContext(leer("modulos/lista.js"), l); assert.equal(l.SB_LISTA_VERSION, ctx.APP_VERSION);
+});

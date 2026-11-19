@@ -42,3 +42,7 @@ test("módulos apagados: una sola vez se prenden Lectura y Objetivos; lo que eli
   c.off.push("lectura"); ls._d.sb_cfg = JSON.stringify(c);                       // el usuario la apaga a propósito más tarde
   assert.equal(SB.activarUnaVez(), false); assert.deepEqual(J(JSON.parse(ls._d.sb_cfg).off), ["estudio", "lectura"]);
 });
+test("archivos a medias: la app avisa si modulos/lista.js no es de la misma versión que version.js", () => {
+  const {SB, ctx} = abrir(); ctx.APP_VERSION = "1.25.2"; ctx.SB_LISTA_VERSION = undefined; assert.match(SB.revisarArchivos(), /de una versión vieja/);
+  ctx.SB_LISTA_VERSION = "1.24.0"; assert.match(SB.revisarArchivos(), /1\.25\.2.*1\.24\.0/); ctx.SB_LISTA_VERSION = "1.25.2"; assert.equal(SB.revisarArchivos(), "");
+});
