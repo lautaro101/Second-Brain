@@ -374,9 +374,15 @@ function ruta() { const m = /^#\/([^\/]+)(?:\/(.*))?$/.exec(location.hash); retu
 /* Una sola vez (1.25.0): deja prendidos Lectura y Objetivos aunque hayan quedado apagados en este dispositivo. Después manda lo que elijas en Ajustes → Módulos activos. */
 const activarUnaVez = () => { const k = cfg(); if (k.a125) return false; k.off = k.off.filter(x => x !== "lectura" && x !== "objetivos"); k.a125 = 1; poner("sb_cfg", k); return true; };
 SB.activarUnaVez = activarUnaVez;
+/* Si subiste version.js pero la carpeta modulos quedó vieja (pasa al arrastrar carpetas a mano), la app dice una versión y corre otra. Esto lo detecta: lista.js lleva su propia versión y tiene que coincidir. */
+const revisarArchivos = () => { const a = window.APP_VERSION, b = window.SB_LISTA_VERSION; if (!a || a === b) return "";
+  return "Los archivos no coinciden: la app es la " + a + " pero modulos/lista.js es " + (b ? "la " + b : "de una versión vieja") + ". Falta subir los archivos de la carpeta modulos al sitio (entrá a esa carpeta y subí lo que tiene adentro, pisando los anteriores)."; };
+SB.revisarArchivos = revisarArchivos;
+let chequeado = false;
 function pintar() {
   if (SB.bloqueado) return;
-  activarUnaVez();   // con el PIN puesto no se dibuja nada hasta desbloquear
+  activarUnaVez();
+  if (!chequeado) { chequeado = true; const m = revisarArchivos(); if (m) { SB.fallos.archivos = m; SB.aviso("Faltan archivos por subir: mirá Ajustes"); } }   // con el PIN puesto no se dibuja nada hasta desbloquear
   const r = ruta(), app = $("app"), m = SB.mods[r.id] && !cfg().off.includes(r.id) ? SB.mods[r.id] : null, f = PANT[r.id] || (m && ((el, s) => m.pantalla(el, s)));
   if (!f) { location.hash = "#/hoy"; return; }
   const tt = m ? [m.icono, m.nombre] : TIT[r.id];

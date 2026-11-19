@@ -1,8 +1,9 @@
 /* ÚNICO lugar donde cambiás la versión de Second Brain.
    Para publicar algo nuevo: cambiá APP_VERSION y agregá arriba de APP_HISTORIAL una línea de qué cambió. Subí este archivo junto con index.html y sw.js. */
-self.APP_VERSION = "1.25.1";
-self.APP_NOVEDADES = "Los módulos Lectura y Objetivos quedan prendidos (si habían quedado apagados en este dispositivo, se prenden una vez; después manda lo que elijas en Ajustes → Módulos activos). Además, en Módulos ahora se avisa cuando hay módulos apagados, para que no desaparezcan sin explicación.";
+self.APP_VERSION = "1.25.2";
+self.APP_NOVEDADES = "La app ahora avisa si subiste los archivos a medias: si version.js es nuevo pero la carpeta modulos quedó vieja, lo dice en un cartel y en Ajustes (antes mostraba la versión nueva con los módulos viejos). Para publicar, subí también lo que hay adentro de modulos.";
 self.APP_HISTORIAL = [
+  ["1.25.2", "La app ahora avisa si subiste los archivos a medias: si version.js es nuevo pero la carpeta modulos quedó vieja, lo dice en un cartel y en Ajustes (antes mostraba la versión nueva con los módulos viejos). Para publicar, subí también lo que hay adentro de modulos."],
   ["1.25.1", "Los módulos Lectura y Objetivos quedan prendidos (si habían quedado apagados en este dispositivo, se prenden una vez; después manda lo que elijas en Ajustes → Módulos activos). Además, en Módulos ahora se avisa cuando hay módulos apagados, para que no desaparezcan sin explicación."],
   ["1.25.0", "Nuevo módulo Objetivos: metas grandes (recibirte, correr 10 km, un viaje) con área, fecha límite y «para qué lo quiero». Se dividen en pasos y el avance se calcula solo (o lo ponés a mano), te dice si vas adelantado, al día o atrasado, y podés sumarle tareas. Los que tienen fecha salen en Hoy y avisan 7 días y 1 día antes, entran en el buscador y en la revisión semanal, y lo que borrás va a la Papelera."],
   ["1.24.0", "Lectura: ahora podés importar tu biblioteca de una vez, pegando una lista («Título - Autor», un libro por línea) o subiendo un CSV con columnas como título, autor, páginas, formato, estado, calificación y fechas (también entiende el CSV de Goodreads). Y sumás metas: libros por año y páginas por día, con la barra de cómo vas, la racha de días leyendo, y un recordatorio en Hoy."],
