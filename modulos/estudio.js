@@ -1,6 +1,7 @@
 /* Módulo Estudio. Datos (esquema 1):
    m materias       {id, n nombre, d días de cursada (0=dom…6=sáb)}
    e evaluaciones   {id, m id de materia, k "parcial"|"final"|"entrega", n título (opcional), f fecha AAAA-MM-DD, nota número o null, h 1 si ya se rindió o entregó}
+   (cada materia puede tener st estado "c"|"r"|"a" y co correlativas [ids de materias que hay que aprobar antes])
    s sesiones       {id, m id de materia, f fecha AAAA-MM-DD, min minutos, c creada}
    El reloj en marcha vive en este dispositivo (clave sb_estudio_reloj) y no se sincroniza. Las notas de clase se crean en Notas con la etiqueta #clase #nombre-de-la-materia. */
 (function () {
@@ -17,6 +18,14 @@ const cuando = (f, h) => { const d = dias(f, h); return d === 0 ? "Hoy" : d === 
 const nomEval = e => TIPO[e.k] + (e.n ? ": " + e.n : "") + (mat(e.m) ? " · " + mat(e.m).n : "");
 const sesiones7 = () => { const d = sumar(ymd(), -6); return D().s.filter(x => x.f >= d); };
 const promedio = id => { const n = D().e.filter(e => e.m === id && typeof e.nota === "number").map(e => e.nota); return n.length ? {p: n.reduce((a, b) => a + b, 0) / n.length, n: n.length} : null; };
+const ST = {"": "Sin cursar", c: "Cursando", r: "Regular", a: "Aprobada"};   // estado de la materia (m.st) y correlativas que hay que aprobar antes (m.co)
+const faltan = m => (m.co || []).map(mat).filter(x => x && x.st !== "a");
+const estadoHtml = m => { const fl = faltan(m), otras = D().m.filter(o => o.id !== m.id);
+  return `<div class="fila-b"><select data-c="st" data-id="${esc(m.id)}" aria-label="Estado de la materia">${Object.keys(ST).map(k => `<option value="${k}"${(m.st || "") === k ? " selected" : ""}>${ST[k]}</option>`).join("")}</select></div>`
+    + (!m.st ? `<small>${fl.length ? "🔒 Te falta aprobar: " + esc(fl.map(x => x.n).join(", ")) : "✅ Habilitada para cursar"}</small>` : "")
+    + (otras.length ? `<details><summary>Correlativas (${(m.co || []).length})</summary><small>Marcá las que tenés que aprobar antes de esta.</small>${otras.map(o => `<label class="fila"><input type="checkbox" data-c="cor" data-id="${esc(m.id)}" data-o="${esc(o.id)}"${(m.co || []).includes(o.id) ? " checked" : ""}> ${esc(o.n)}</label>`).join("")}</details>` : ""); };
+const progreso = () => { const M = D().m, t = M.length, a = M.filter(m => m.st === "a").length, cu = M.filter(m => m.st === "c").length, hab = M.filter(m => !m.st && !faltan(m).length), p = t ? Math.round(100 * a / t) : 0;
+  return t ? `<section class="card"><h3>🎓 Avance de la carrera</h3><div style="height:8px;border-radius:4px;background:rgba(128,128,128,.25)"><i style="display:block;height:8px;border-radius:4px;background:#1c3556;width:${p}%"></i></div><p>${a} de ${t} materias aprobadas (${p} %)${cu ? " · " + cu + " cursando" : ""}</p>${hab.length ? `<small>Habilitadas para cursar: ${hab.map(m => esc(m.n)).join(", ")}</small>` : ""}</section>` : ""; };
 let tic = 0;   // temporizador que mueve el reloj en pantalla
 const guardar = () => SB.guardar("estudio");
 const sesion = (m, min, f) => { D().s.unshift({id: uid(), m, f: f || ymd(), min, c: Date.now()}); guardar(); };
@@ -52,6 +61,7 @@ SB.registrar({
     const clases = m => SB.mods.notas && SB.mods.notas.porEtiqueta ? SB.mods.notas.porEtiqueta(slug(m.n)).slice(0, 5) : [];
     const tarjeta = m => { const pr = promedio(m.id), cl = clases(m);
       return `<section class="card"><div class="fila"><div class="tx"><span><b>${esc(m.n)}</b></span><small>${ORDEN.filter(d => (m.d || []).includes(d)).map(d => NOM[d]).join(" ") || "sin días de cursada"} · ${minSem(m.id) ? hm(minSem(m.id)) + " esta semana" : "sin estudio esta semana"}${pr ? " · promedio " + num(Math.round(pr.p * 100) / 100) + " (" + pr.n + ")" : ""}</small></div><button class="x" data-a="mdel" data-id="${esc(m.id)}" aria-label="Borrar materia">✕</button></div>
+        ${estadoHtml(m)}
         ${cl.map(n => `<a class="item" href="#/notas/${esc(n.id)}">📝 ${esc(SB.mods.notas.titulo(n.x))}</a>`).join("")}
         ${SB.mods.notas && SB.mods.notas.crear ? `<div class="fila-b"><button data-a="clase" data-id="${esc(m.id)}">📝 Nota de clase</button></div>` : ""}</section>`; };
     el.innerHTML = `<section class="card"><h3>⏱️ Sesión de estudio</h3>
@@ -63,7 +73,7 @@ SB.registrar({
       <section class="card"><h3>📅 Parciales, finales y entregas</h3>${pend.length ? pend.map(filaE).join("") : `<p class="ayuda">Nada pendiente.</p>`}
       ${hechas.length ? `<details><summary>Hechas hace poco</summary>${hechas.map(filaE).join("")}</details>` : ""}
       ${M.length ? `<details><summary>Agregar evaluación o entrega</summary><form data-f="eval"><div class="fila-b">${tipoSel}${matSel("m")}</div><input name="n" placeholder="Título (opcional, ej: Unidades 1 a 3)" autocomplete="off"><input type="date" name="f" required aria-label="Fecha"><button class="pri">Agregar</button></form></details>` : ""}</section>
-      <h3>Materias</h3>${M.length ? M.map(tarjeta).join("") : `<p class="vacio">Todavía no cargaste materias.</p>`}
+      ${progreso()}<h3>Materias</h3>${M.length ? M.map(tarjeta).join("") : `<p class="vacio">Todavía no cargaste materias.</p>`}
       <form data-f="materia"><input name="n" placeholder="Nueva materia (ej: Álgebra)" required autocomplete="off"><div class="chips">${ORDEN.map(d => `<label class="chip off"><input type="checkbox" name="d" value="${d}" hidden><span>${NOM[d]}</span></label>`).join("")}</div><small>Los días de cursada aparecen en Hoy.</small><button class="pri">Agregar materia</button></form>`;
     el.querySelectorAll(".chips label input").forEach(i => { i.onchange = () => i.parentNode.classList.toggle("off", !i.checked); });
     clearInterval(tic);
@@ -76,14 +86,16 @@ SB.registrar({
         else if (a === "eval") { if (!fm.m.value || !fm.f.value) return; D().e.push({id: uid(), m: fm.m.value, k: TIPO[fm.k.value] ? fm.k.value : "parcial", n: fm.n.value.trim(), f: fm.f.value, nota: null, h: 0}); guardar(); }
         SB.pintar();
       },
-      c: (a, n) => { if (a !== "nota") return; const e = D().e.find(x => x.id === n.dataset.id); if (!e) return; const v = parseFloat(String(n.value).replace(",", ".")); e.nota = isFinite(v) ? v : null; guardar(); SB.pintar(); },
+      c: (a, n) => {
+        if (a === "st" || a === "cor") { const m = mat(n.dataset.id); if (!m) return; if (a === "st") { if (n.value) m.st = n.value; else delete m.st; } else { const co = new Set(m.co || []); if (n.checked) co.add(n.dataset.o); else co.delete(n.dataset.o); if (co.size) m.co = [...co]; else delete m.co; } guardar(); return a === "st" ? SB.pintar() : undefined; }
+        if (a !== "nota") return; const e = D().e.find(x => x.id === n.dataset.id); if (!e) return; const v = parseFloat(String(n.value).replace(",", ".")); e.nota = isFinite(v) ? v : null; guardar(); SB.pintar(); },
       a: (a, b) => {
         if (a === "parar") { const x = reloj(); SB.almacen.quitar(RK); if (x) { const min = Math.max(1, Math.round((Date.now() - x.t0) / 60000)); if (mat(x.m)) sesion(x.m, min); SB.aviso("Sesión guardada: " + hm(min)); } return SB.pintar(); }
         if (a === "descartar") { if (confirm("¿Descartar esta sesión sin guardarla?")) SB.almacen.quitar(RK); return SB.pintar(); }
         if (a === "clase") { const m = mat(b.dataset.id); if (!m) return; const n = SB.mods.notas.crear("Clase: " + m.n + "\n#clase #" + slug(m.n) + "\n\n**Fecha:** " + new Date().toLocaleDateString("es-AR") + "\n\n## Temas\n- \n\n## Apuntes\n\n\n## Para repasar\n- [ ] \n\n## Dudas\n- "); location.hash = "#/notas/" + n.id + "/e"; return; }
         if (a === "eok") { const e = D().e.find(x => x.id === b.dataset.id); if (e) { e.h = e.h ? 0 : 1; guardar(); } }
         else if (a === "edel") { const e = D().e.find(x => x.id === b.dataset.id); if (e && confirm("¿Borrar «" + nomEval(e) + "»?")) { D().e = D().e.filter(x => x !== e); guardar(); } }
-        else if (a === "mdel") { const m = mat(b.dataset.id); if (m && confirm("¿Borrar «" + m.n + "» con sus evaluaciones y sesiones? Las notas de clase quedan en Notas.")) { D().m = D().m.filter(x => x !== m); D().e = D().e.filter(x => x.m !== m.id); D().s = D().s.filter(x => x.m !== m.id); guardar(); } }
+        else if (a === "mdel") { const m = mat(b.dataset.id); if (m && confirm("¿Borrar «" + m.n + "» con sus evaluaciones y sesiones? Las notas de clase quedan en Notas.")) { D().m = D().m.filter(x => x !== m); D().m.forEach(o => { if (o.co) { o.co = o.co.filter(i => i !== m.id); if (!o.co.length) delete o.co; } }); D().e = D().e.filter(x => x.m !== m.id); D().s = D().s.filter(x => x.m !== m.id); guardar(); } }
         SB.pintar();
       }
     });
