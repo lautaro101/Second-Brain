@@ -326,7 +326,7 @@ function pBuscar(el) {
 }
 function pMas(el) {
   const n = inbox().length;
-  el.innerHTML = `<div class="grilla">${activos().map(m => `<a class="mod" href="#/${esc(m.id)}"><i>${m.icono}</i>${esc(m.nombre)}</a>`).join("")}<a class="mod" href="#/inbox"><i>📥</i>Inbox${n ? " (" + n + ")" : ""}</a><a class="mod" href="#/semana"><i>🗓️</i>Revisión semanal</a></div>`;
+  el.innerHTML = `<div class="grilla">${activos().map(m => `<a class="mod" href="#/${esc(m.id)}"><i>${m.icono}</i>${esc(m.nombre)}</a>`).join("")}<a class="mod" href="#/inbox"><i>📥</i>Inbox${n ? " (" + n + ")" : ""}</a><a class="mod" href="#/semana"><i>🗓️</i>Revisión semanal</a></div>${SB.orden.length > activos().length ? `<p class="ayuda">Hay ${SB.orden.length - activos().length} ${SB.orden.length - activos().length === 1 ? "módulo apagado" : "módulos apagados"} en este dispositivo. Prendelos en <a href="#/ajustes">Ajustes → Módulos activos</a>.</p>` : ""}`;
 }
 function pSemana(el) {
   let h = ""; const n = inbox().length;
@@ -371,8 +371,12 @@ function pAjustes(el) {
 const PANT = {hoy: pHoy, inbox: pInbox, buscar: pBuscar, mas: pMas, semana: pSemana, ajustes: pAjustes};
 const TIT = {hoy: ["🏠", "Hoy"], inbox: ["📥", "Inbox"], buscar: ["🔍", "Buscar"], mas: ["▦", "Módulos"], semana: ["🗓️", "Revisión semanal"], ajustes: ["⚙️", "Ajustes"]};
 function ruta() { const m = /^#\/([^\/]+)(?:\/(.*))?$/.exec(location.hash); return {id: m ? m[1] : "hoy", sub: m && m[2] ? decodeURIComponent(m[2]) : ""}; }
+/* Una sola vez (1.25.0): deja prendidos Lectura y Objetivos aunque hayan quedado apagados en este dispositivo. Después manda lo que elijas en Ajustes → Módulos activos. */
+const activarUnaVez = () => { const k = cfg(); if (k.a125) return false; k.off = k.off.filter(x => x !== "lectura" && x !== "objetivos"); k.a125 = 1; poner("sb_cfg", k); return true; };
+SB.activarUnaVez = activarUnaVez;
 function pintar() {
-  if (SB.bloqueado) return;   // con el PIN puesto no se dibuja nada hasta desbloquear
+  if (SB.bloqueado) return;
+  activarUnaVez();   // con el PIN puesto no se dibuja nada hasta desbloquear
   const r = ruta(), app = $("app"), m = SB.mods[r.id] && !cfg().off.includes(r.id) ? SB.mods[r.id] : null, f = PANT[r.id] || (m && ((el, s) => m.pantalla(el, s)));
   if (!f) { location.hash = "#/hoy"; return; }
   const tt = m ? [m.icono, m.nombre] : TIT[r.id];

@@ -13,6 +13,8 @@ Organizador de vida personal (PWA sin frameworks ni build). Núcleo: captura rá
 - `version.js`: único lugar donde se cambia la versión. `sw.js` + `manifest.webmanifest`: instalable y sin conexión.
 
 ## Sumar un módulo
+Un módulo apagado en Ajustes → Módulos activos (`sb_cfg.off`, por dispositivo) no aparece en Módulos, Hoy, el buscador ni el Inbox; la pantalla Módulos avisa cuántos hay apagados. En la 1.25.1 se prenden Lectura y Objetivos una sola vez (`sb_cfg.a125`).
+
 1. Creá `modulos/salud.js` con `SB.registrar({id, nombre, icono, esquema, inicial, migraciones, pantalla, hoy, buscar, avisos, semana, captura})` (mirá `modulos/habitos.js` como ejemplo).
 2. Agregá `"modulos/salud.js"` a `SB_ARCHIVOS` en `modulos/lista.js`.
 3. Subí la versión en `version.js` (y una línea en `APP_HISTORIAL`).
@@ -58,6 +60,9 @@ El estilo (colores, tipografía Inter incluida en `fuentes.css`, tarjetas, naveg
 
 ## Colecciones
 Bases de datos propias como en Notion (`modulos/colecciones.js`). Una colección tiene propiedades (texto, número, fecha, casilla, selección, selección múltiple, enlace) y registros. Vistas: Tabla (con orden por columna y casillas tocables) y Tablero (agrupado por una propiedad de selección, con ◀ ▶). Plantillas: Libros, Películas y series, Ideas. La primera propiedad de fecha alimenta Hoy y los avisos. Cada registro tiene una página de texto con Markdown (`x`). Datos: `{c: colecciones, r: registros}`; la Papelera los cubre sola.
+
+## Objetivos
+Metas grandes con avance (`modulos/objetivos.js`). Un objetivo tiene nombre, área, fecha límite opcional, «para qué lo quiero» y un estado (activo, en pausa, logrado). **Avance**: con pasos (`hi`) es hechos/total; sin pasos, el % que ponés vos (`pc`). **Ritmo** (solo con fecha límite): compara el avance con el tiempo que pasó desde que lo creaste (adelantado, al día, atrasado). Sus **tareas** son las de Tareas con la etiqueta `#nombre-del-objetivo`. Los activos con fecha salen en Hoy desde 7 días antes y avisan 7 y 1 día antes. Captura del Inbox: «Objetivo». Datos: `{o: objetivos}`; la Papelera lo cubre sola.
 
 ## Papelera y buscador rápido
 **Papelera** (`modulos/papelera.js`): mira cada guardado (`SB.alCambio`) y, si falta algo que había (por `id`) en cualquier colección de un módulo, lo guarda 30 días con todo lo que se borró junto (mismo `g`). No hace falta tocar los módulos. Lo que llega por sincronización (guardado silencioso) no cuenta, y las notas vacías se descartan. Se sincroniza como cualquier módulo. **Ctrl+K** (`SB.buscador`) abre una ventana que busca con el `buscar` de cada módulo y también sirve para ir a un módulo.
