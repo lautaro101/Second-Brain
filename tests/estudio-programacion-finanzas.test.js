@@ -179,3 +179,96 @@ test("tareas: la captura rápida y la pantalla siguen andando con el campo nuevo
   const {SB} = abrir({extra: {}}); SB.mods.tareas.captura.guardar("Comprar #taller"); SB.mods.tareas.crear("Con fecha", SB.u.sumar(SB.u.ymd(), 1), "x");
   const el = {querySelectorAll: () => [], set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h; }}; SB.mods.tareas.pantalla(el); assert.match(el._h, /Prioridad/); assert.match(el._h, /data-c="gp"/);
 });
+
+/* ---- Tareas: prioridad manual, orden de Hoy y aviso al entrar en Prioridad ---- */
+test("tareas: la ⭐ manual la deja en Prioridad aunque falte mucho o no tenga fecha; urgente sigue siendo urgente", () => {
+  const {SB} = abrir(), h = SB.u.ymd(), n = SB.mods.tareas.nivel;
+  assert.equal(n({f: SB.u.sumar(h, 20), h: 0, u: 1}, h), "prioridad"); assert.equal(n({f: "", h: 0, u: 1}, h), "prioridad"); assert.equal(n({f: SB.u.sumar(h, 5), h: 0, u: 1}, h), "prioridad");
+  assert.equal(n({f: SB.u.sumar(h, -1), h: 0, u: 1}, h), "urgente"); assert.equal(n({f: "", h: 0}, h), "normal"); assert.equal(n({f: "", h: 9, u: 1}, h), "normal", "hecha: no cuenta");
+});
+test("tareas: Hoy ordena vencidas (la más vieja primero), de hoy, prioritarias por fecha y prioritarias sin fecha; sin repetir", () => {
+  const {SB} = abrir(), h = SB.u.ymd(), T = SB.datos("tareas").t, s = d => SB.u.sumar(h, d);
+  T.push({id: "1", t: "Estrella sin fecha", f: "", p: "", h: 0, c: 1, u: 1}, {id: "2", t: "Prioridad en 2", f: s(2), p: "", h: 0, c: 2}, {id: "3", t: "Hoy", f: h, p: "", h: 0, c: 3}, {id: "4", t: "Vencida hace 1", f: s(-1), p: "", h: 0, c: 4},
+    {id: "5", t: "Vencida hace 5", f: s(-5), p: "", h: 0, c: 5}, {id: "6", t: "Estrella lejos", f: s(30), p: "", h: 0, c: 6, u: 1}, {id: "7", t: "Normal sin fecha", f: "", p: "", h: 0, c: 7});
+  const o = J(SB.mods.tareas.hoy().map(x => x.t)); assert.deepEqual(o, ["Vencida hace 5", "Vencida hace 1", "Hoy", "Prioridad en 2", "Estrella lejos", "Estrella sin fecha", "Normal sin fecha"]);
+  assert.match(SB.mods.tareas.hoy().find(x => x.t === "Estrella sin fecha").s, /⭐/);
+});
+test("tareas: alternar la ⭐ desde la pantalla y crear con ⭐ desde el formulario", () => {
+  const {SB} = abrir(); SB.pintar = () => {}; const el = {querySelectorAll: () => [], set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h; }}; SB.mods.tareas.pantalla(el);
+  el.onsubmit({target: {closest: () => ({dataset: {f: "n"}, t: {value: "Llamar"}, f: {value: ""}, p: {value: ""}, a: {value: ""}, u: {checked: true}})}, preventDefault() {}}); assert.equal(SB.datos("tareas").t[0].u, 1);
+  const id = SB.datos("tareas").t[0].id; el.onclick({target: {closest: () => ({dataset: {a: "star", id}})}}); assert.equal(SB.datos("tareas").t[0].u, undefined);
+  el.onclick({target: {closest: () => ({dataset: {a: "star", id}})}}); assert.equal(SB.datos("tareas").t[0].u, 1);
+});
+test("tareas: el service worker avisa al entrar en Prioridad (3 días), el día antes y el mismo día; una vez cada uno", () => {
+  const {SB} = abrir(), {abrirSW} = require("./helpers"), {avisosPendientes} = abrirSW(); SB.datos("tareas").t.push({id: "t", t: "Entregar TP", f: "2026-11-23", p: "", h: 0, c: 1}, {id: "h", t: "Ya hecha", f: "2026-11-23", p: "", h: 5, c: 2});
+  const ev = J(SB.mods.tareas.avisos()), ya = [], sal = []; assert.equal(ev.length, 1); assert.deepEqual(ev[0].av, [3, 1]);
+  for (let d = 14; d <= 24; d++) avisosPendientes(ev, new Date("2026-11-" + d + "T09:00:00"), ya).forEach(x => { ya.push(x.key); sal.push(d + ": " + x.titulo + " — " + x.cuerpo); });
+  assert.deepEqual(sal, ["20: En 3 días: Tarea — Entregar TP", "22: Mañana: Tarea — Entregar TP", "23: Hoy: Tarea — Entregar TP"]);
+});
+test("tareas: el aviso de entrada en Prioridad respeta los días propios de la tarea", () => {
+  const {SB} = abrir(); SB.datos("tareas").t.push({id: "t", t: "Grande", f: "2026-11-30", p: "", h: 0, c: 1, a: 7}, {id: "u", t: "Rápida", f: "2026-11-30", p: "", h: 0, c: 2, a: 0});
+  const ev = J(SB.mods.tareas.avisos()); assert.deepEqual(ev.find(e => e.k === "t").av, [7, 1]); assert.deepEqual(ev.find(e => e.k === "u").av, [1]);
+});
+
+/* ---- Tareas: tablero ---- */
+const fakeEl = () => ({querySelectorAll: () => [], set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h; }});
+test("tareas: ◀ y ▶ pasan una tarea entre Pendiente, En curso y Hecha (sin salirse de los extremos)", () => {
+  const {SB} = abrir(); SB.pintar = () => {}; SB.mods.tareas.crear("Armar informe"); const el = fakeEl(); SB.mods.tareas.pantalla(el); const T = () => SB.datos("tareas").t[0], id = T().id;
+  const mover = d => el.onclick({target: {closest: () => ({dataset: {a: "mover", id, d: String(d)}})}});
+  mover(-1); assert.ok(!T().e && !T().h, "no baja de Pendiente"); mover(1); assert.equal(T().e, 1); assert.equal(T().h, 0); mover(1); assert.ok(T().h > 0); assert.equal(T().e, undefined); mover(1); assert.ok(T().h > 0, "no sube de Hecha");
+  mover(-1); assert.equal(T().h, 0); assert.equal(T().e, 1, "de Hecha vuelve a En curso"); mover(-1); assert.equal(T().e, undefined);
+});
+test("tareas: la vista Lista/Tablero se elige y se recuerda en el dispositivo; el tablero muestra tres columnas", () => {
+  const {SB} = abrir(); SB.pintar = () => {}; SB.mods.tareas.crear("A"); SB.mods.tareas.crear("B"); SB.datos("tareas").t[0].e = 1; SB.datos("tareas").t[1].h = Date.now();
+  let el = fakeEl(); SB.mods.tareas.pantalla(el); assert.ok(!/En curso <small>/.test(el._h), "por defecto: lista");
+  el.onclick({target: {closest: () => ({dataset: {a: "vista", v: "tablero"}})}}); assert.equal(SB.almacen.leer("sb_tareas_vista", "lista"), "tablero");
+  el = fakeEl(); SB.mods.tareas.pantalla(el); assert.match(el._h, /Pendiente <small>0<\/small>/); assert.match(el._h, /En curso <small>1<\/small>/); assert.match(el._h, /Hecha <small>1<\/small>/); assert.match(el._h, /data-a="mover"/);
+  el.onclick({target: {closest: () => ({dataset: {a: "vista", v: "lista"}})}}); assert.equal(SB.almacen.leer("sb_tareas_vista", "lista"), "lista");
+});
+test("tareas: las que están en curso salen en Hoy (sin repetirse) y al hacerlas dejan de estar en curso", () => {
+  const {SB} = abrir(), h = SB.u.ymd(), T = SB.datos("tareas").t;
+  T.push({id: "1", t: "En curso sin fecha", f: "", p: "", h: 0, c: 1, e: 1}, {id: "2", t: "En curso y vence hoy", f: h, p: "", h: 0, c: 2, e: 1}, {id: "3", t: "Suelta", f: "", p: "", h: 0, c: 3});
+  const o = J(SB.mods.tareas.hoy().map(x => x.t + "|" + x.s)); assert.deepEqual(o, ["En curso y vence hoy|Vence hoy", "En curso sin fecha|🔧 En curso", "Suelta|Sin fecha"]);
+  SB.mods.tareas.hoy()[1].tocar(); assert.ok(T[0].h > 0); assert.equal(T[0].e, undefined);
+  SB.mods.tareas.alternar("2"); assert.equal(T[1].e, undefined);
+});
+
+/* ---- Finanzas: gráficos (1.12.0) ---- */
+const finz = () => { const p = abrir({extra: {setInterval, clearInterval}}); p.SB.aviso = () => {}; p.SB.pintar = () => {}; return p; };
+const mov = (SB, t, a, c, f) => SB.datos("finanzas").g.push({id: Math.random().toString(36), t, a, c, n: "", f, m: 1});
+test("finanzas: la serie son los 6 meses que terminan en el elegido, también al cruzar de año", () => {
+  const {SB} = finz(); mov(SB, "g", 10000, "Comida", "2025-10-05"); mov(SB, "i", 500000, "Sueldo", "2026-02-01"); mov(SB, "g", 2500, "Ocio", "2026-02-20"); mov(SB, "g", 999, "Ocio", "2025-09-30");
+  const s = SB.mods.finanzas.util.serie("2026-02", 6);
+  assert.deepEqual(JSON.parse(JSON.stringify(s.map(x => x.ym))), ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"]);
+  assert.equal(s[0].g, 999); assert.equal(s[1].g, 10000); assert.equal(s[5].g, 2500); assert.equal(s[5].i, 500000); assert.equal(s[3].g, 0);
+});
+test("finanzas: por categoría, con el nivel del tope (79 % ok, 80 % aviso, 100 % pasado) y las que tienen tope pero no gasto", () => {
+  const {SB} = finz(), u = SB.mods.finanzas.util, D = SB.datos("finanzas"); D.b = {Comida: 100000, Ocio: 100000, Salud: 100000, Ropa: 50000};
+  mov(SB, "g", 79000, "Comida", "2026-03-02"); mov(SB, "g", 80000, "Ocio", "2026-03-03"); mov(SB, "g", 100000, "Salud", "2026-03-04"); mov(SB, "g", 30000, "Otros", "2026-03-05"); mov(SB, "g", 9999999, "Comida", "2026-04-01"); mov(SB, "i", 500, "Sueldo", "2026-03-06");
+  const r = u.porCategoria("2026-03"), por = Object.fromEntries(r.map(x => [x.c, x]));
+  assert.equal(por.Comida.nivel, "ok"); assert.equal(por.Ocio.nivel, "aviso"); assert.equal(por.Salud.nivel, "pasado"); assert.equal(por.Otros.nivel, ""); assert.equal(por.Otros.tope, 0);
+  assert.equal(por.Ropa.g, 0); assert.equal(por.Ropa.nivel, "ok", "con tope y sin gasto aparece, en 0 %"); assert.ok(!("Sueldo" in por), "los ingresos no son categorías de gasto");
+  assert.deepEqual(JSON.parse(JSON.stringify(r.map(x => x.c))), ["Salud", "Ocio", "Comida", "Otros", "Ropa"], "de más a menos gastado");
+  assert.equal(u.nivelPct(79), "ok"); assert.equal(u.nivelPct(80), "aviso"); assert.equal(u.nivelPct(99), "aviso"); assert.equal(u.nivelPct(100), "pasado");
+});
+test("finanzas: el promedio ignora el mes elegido y los meses sin gastos", () => {
+  const {promedioPrevio} = finz().SB.mods.finanzas.util;
+  assert.equal(promedioPrevio([{g: 100}, {g: 0}, {g: 300}, {g: 99999}]), 200); assert.equal(promedioPrevio([{g: 0}, {g: 0}, {g: 500}]), 0); assert.equal(promedioPrevio([{g: 500}]), 0);
+});
+test("finanzas: el gráfico de barras es válido, proporcional y no rompe con ceros", () => {
+  const {graficoBarras, serie} = finz().SB.mods.finanzas.util;
+  assert.equal(graficoBarras([{ym: "2026-01", g: 0, i: 0}, {ym: "2026-02", g: 0, i: 0}], 0), "", "sin datos no hay gráfico");
+  const s = [{ym: "2026-01", g: 1000, i: 0}, {ym: "2026-02", g: 500, i: 2000}, {ym: "2026-03", g: 0, i: 0}], svg = graficoBarras(s, 750);
+  assert.match(svg, /^<svg/); assert.match(svg, /<\/svg>$/); assert.ok(!/NaN|Infinity|undefined/.test(svg)); ["ene", "feb", "mar"].forEach(m => assert.ok(svg.includes(">" + m + "<"), m));
+  const alturas = [...svg.matchAll(/<rect x="[\d.]+" y="[\d.]+" width="17" height="([\d.]+)"/g)].map(m => +m[1]); assert.equal(Math.max(...alturas), 112, "la barra más alta ocupa todo el alto");
+  assert.equal(alturas[0], 56, "1000 de 2000 = la mitad"); assert.match(svg, /stroke-dasharray/, "línea del promedio"); assert.ok(!/stroke-dasharray/.test(graficoBarras(s, 0)));
+  assert.ok(graficoBarras(serie("2026-03", 6), 0) === "" , "serie vacía");
+});
+test("finanzas: la pestaña Gráficos se dibuja con datos y vacía, y los nombres de categoría se escapan", () => {
+  const {SB} = finz(); const vista = () => { const el = {querySelectorAll: () => [], set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h; }}; SB.mods.finanzas.pantalla(el); return el; };
+  const ir = el => el.onclick({target: {closest: () => ({dataset: {a: "tab", t: "graf"}})}});
+  let el = vista(); ir(el); el = vista(); assert.match(el.innerHTML, /Gasto por categoría/); assert.match(el.innerHTML, /Sin gastos este mes/); assert.match(el.innerHTML, /Todavía no hay movimientos/);
+  const hoy = SB.u.ymd(); mov(SB, "g", 123456, '<img src=x onerror=alert(1)>', hoy); mov(SB, "g", 5000, "Comida", SB.u.sumar(hoy.slice(0, 7) + "-01", -5)); SB.datos("finanzas").b.Comida = 10000;
+  el = vista(); const h = el.innerHTML; assert.match(h, /<svg/); assert.match(h, /<table class="gtab">/); assert.ok(!h.includes("<img src=x"), "texto del usuario sin escapar"); assert.match(h, /&lt;img/);
+  assert.match(h, /Promedio de gasto de los meses anteriores/);
+});

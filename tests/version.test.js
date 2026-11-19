@@ -32,3 +32,21 @@ test("el JavaScript de index.html, sw.js, núcleo y módulos no tiene errores de
   bloques.forEach((b, i) => assert.doesNotThrow(() => new vm.Script(b), "bloque " + i));
   ["sw.js", "core.js", "sync.js", "seguridad.js", ...fs.readdirSync(path.join(RAIZ, "modulos")).map(f => "modulos/" + f)].filter(f => f.endsWith(".js")).forEach(f => assert.doesNotThrow(() => new vm.Script(leer(f)), f));
 });
+
+/* ---- que no vuelvan a desaparecer módulos (pasó en 1.11.2 y 1.11.3) ---- */
+test("cada archivo de modulos/ está en lista.js, y cada entrada de lista.js existe", () => {
+  const c = {}; c.self = c; vm.createContext(c); vm.runInContext(leer("modulos/lista.js"), c);
+  const enCarpeta = fs.readdirSync(path.join(RAIZ, "modulos")).filter(f => f.endsWith(".js") && f !== "lista.js").map(f => "modulos/" + f).sort();
+  const enLista = [...c.SB_ARCHIVOS].sort();
+  assert.deepEqual(enLista, enCarpeta, "lista.js y la carpeta modulos/ no coinciden");
+  assert.equal(new Set(enLista).size, enLista.length, "hay un módulo repetido en lista.js");
+});
+test("todos los módulos de la lista se registran sin fallos y aparecen en la app", () => {
+  const {abrir} = require("./helpers"), {SB, ctx} = abrir({extra: {setInterval, clearInterval}});
+  assert.deepEqual(JSON.parse(JSON.stringify(SB.fallos)), {}, "algún módulo falló al cargar");
+  ctx.SB_ARCHIVOS.forEach(f => { const id = f.replace(/^modulos\//, "").replace(/\.js$/, ""); assert.ok(SB.orden.includes(id), id + " está en lista.js pero no se registró"); assert.ok(SB.mods[id].nombre, id); });
+  assert.equal(SB.orden.length, ctx.SB_ARCHIVOS.length);
+});
+test("el service worker arma su lista de archivos a partir de lista.js (así un módulo nuevo funciona sin conexión)", () => {
+  assert.match(leer("sw.js"), /SB_ARCHIVOS/); assert.match(leer("index.html"), /modulos\/lista\.js/);
+});

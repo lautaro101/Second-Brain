@@ -16,6 +16,7 @@ function fakeIDB(datos = new Map(), {falla} = {}) {
         put: (v, k) => req(r => { if (falla && falla(k)) throw new Error("falla simulada"); datos.set(k, structuredClone(v)); r.result = k; }),
         get: k => req(r => { r.result = datos.has(k) ? structuredClone(datos.get(k)) : undefined; }),
         delete: k => req(() => { datos.delete(k); }),
+        getAllKeys: () => req(r => { r.result = [...datos.keys()]; }),
         openCursor() { const ks = [...datos.keys()], r = {result: null, onsuccess: null, onerror: null}; let i = -1;
           const paso = () => setTimeout(() => { i++; r.result = i < ks.length ? {key: ks[i], value: structuredClone(datos.get(ks[i])), continue: paso} : null; r.onsuccess && r.onsuccess(); }, 0); paso(); return r; }
       });

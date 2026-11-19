@@ -111,3 +111,44 @@ test("recordatorio: guardar el archivo de sincronización o descargar una copia 
   const {SB, ls} = conDatos(abrir()); SB.seg.debeRecordar(Date.now() - 30 * DIA); ls.setItem("sb_copia", JSON.stringify({t: Date.now() - 30 * DIA, h: ""}));
   assert.equal(SB.seg.debeRecordar(), true); SB.copiaHecha(); assert.equal(SB.seg.debeRecordar(), false);
 });
+
+/* ---- copias automáticas internas, cifradas (1.13.1) ---- */
+const CLAVE = "clave larga 123", SECRETO = "wifi secreto123";
+const sembrar = (extra = {}) => ({sb_ult_version: "0.9.0", sb_inbox: JSON.stringify([{id: "i1", t: SECRETO, c: 1}]), ...extra});   // versión vieja guardada → al abrir se hace la copia de actualización
+const copiasDe = p => JSON.parse(p.ls._d.sb_copias || "[]");
+test("copias internas: sin cifrado, la copia de la actualización se guarda como siempre (con los datos a la vista)", () => {
+  const p = abrir({datos: sembrar()}), c = copiasDe(p); assert.equal(c.length, 1); assert.ok(c[0].d && c[0].d.sb_inbox); assert.equal(c[0].c, undefined);
+});
+test("copias internas: con el cifrado activo la copia nunca se escribe en claro; se cifra y recién ahí se guarda", async () => {
+  const p = abrir({datos: sembrar({sb_seg: JSON.stringify({clave: CLAVE})})});
+  assert.equal(p.ls._d.sb_copias, undefined, "todavía no se escribió nada en claro"); assert.ok(p.SB.copiaPend, "queda pendiente en memoria");
+  assert.equal(await p.SB.seg.cifrarCopias(), 1); const c = copiasDe(p);
+  assert.equal(c.length, 1); assert.equal(c[0].c.cifrado, 1); assert.equal(c[0].d, undefined); assert.ok(!p.ls._d.sb_copias.includes("secreto123")); assert.equal(p.SB.copiaPend, null);
+  assert.equal(c[0].v !== undefined, true, "la versión y la fecha quedan a la vista para listarla");
+  const datos = JSON.parse(await p.SB.abrirTexto(JSON.stringify(c[0].c), false)); assert.ok(JSON.stringify(datos).includes(SECRETO), "se puede restaurar con la clave");
+});
+test("copias internas: al activar el cifrado se cifran las copias que ya estaban en claro", async () => {
+  const p = abrir({datos: sembrar()}); assert.ok(p.ls._d.sb_copias.includes("secreto123"));
+  assert.equal(await p.SB.seg.activarCifrado(CLAVE), 1); assert.ok(!p.ls._d.sb_copias.includes("secreto123")); assert.equal(copiasDe(p)[0].c.cifrado, 1);
+  assert.equal(await p.SB.seg.cifrarCopias(), 0, "una segunda pasada no vuelve a cifrar nada");
+});
+test("copias internas: al cambiar la clave se recifran; la vieja ya no abre y la nueva sí", async () => {
+  const p = abrir({datos: sembrar()}); await p.SB.seg.activarCifrado(CLAVE);
+  const r = await p.SB.seg.cambiarClave(CLAVE, "otra clave 456"); assert.deepEqual(J(r), {ok: 1, perdidas: 0});
+  const c = copiasDe(p)[0].c; await assert.rejects(p.SB.seg.descifrar(c, CLAVE), e => e.clave); assert.ok((await p.SB.seg.descifrar(c, "otra clave 456")).includes(SECRETO));
+});
+test("copias internas: al desactivar el cifrado vuelven a quedar legibles", async () => {
+  const p = abrir({datos: sembrar()}); await p.SB.seg.activarCifrado(CLAVE);
+  const r = await p.SB.seg.quitarCifrado(CLAVE); assert.deepEqual(J(r), {ok: 1, perdidas: 0});
+  const c = copiasDe(p)[0]; assert.equal(c.c, undefined); assert.ok(c.d.sb_inbox);
+});
+test("copias internas: una copia cifrada con otra clave se cuenta como perdida y no se toca ni se rompe", async () => {
+  const p = abrir({datos: sembrar({sb_seg: JSON.stringify({clave: CLAVE})})}); await p.SB.seg.cifrarCopias();
+  const ajena = await p.SB.seg.cifrar("{}", "clave ajena xx"); p.SB.guardarCopias([{t: 1, v: "0.5.0", m: "", c: ajena}, ...copiasDe(p)]);
+  const r = await p.SB.seg.recifrarCopias(CLAVE, "nueva clave 999"); assert.deepEqual(J(r), {ok: 1, perdidas: 1});
+  assert.deepEqual(J(copiasDe(p)[0].c), J(ajena), "la ajena queda igual"); assert.ok((await p.SB.seg.descifrar(copiasDe(p)[1].c, "nueva clave 999")).includes(SECRETO));
+});
+test("copias internas: si seguridad.js no carga, la copia pendiente se guarda igual para no perder la red de seguridad", () => {
+  const p = abrir({datos: sembrar({sb_seg: JSON.stringify({clave: CLAVE})})}); assert.ok(p.SB.copiaPend); delete p.SB.seg; p.SB.volcarCopia();
+  assert.equal(p.SB.copiaPend, null); assert.ok(copiasDe(p)[0].d.sb_inbox);
+});
