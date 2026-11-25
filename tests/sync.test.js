@@ -91,3 +91,22 @@ test("guardar avisa a la sincronización con el módulo que cambió", () => {
   const d = abrir(), vistos = []; d.SB.alGuardar.push(id => vistos.push(id)); d.SB.guardar("notas"); d.SB.inbox.poner([]);
   assert.deepEqual(J(vistos), ["notas", "inbox"]);
 });
+
+test("pantalla de sincronización en el celu: «Actualizar mi archivo» guía en 2 pasos (cargar, juntar y recién ahí aparece guardar y reemplazar)", async () => {
+  const {SB} = abrir(); let abierto = 0;
+  const cont = {innerHTML: "", isConnected: true, querySelector: () => ({click() { abierto++; }})};
+  const sec = SB.secciones.find(f => { const t = {innerHTML: "", isConnected: true, querySelector: () => null}; f(t); return /Sincronizar PC y celu/.test(t.innerHTML); }); sec(cont);
+  assert.match(cont.innerHTML, /Actualizar \(paso 1\)/); assert.doesNotMatch(cont.innerHTML, /Paso 2 de 2/);
+  const tocar = (a, extra) => cont.onclick({target: {closest: () => Object.assign({dataset: {a}}, extra)}});
+  tocar("sy-act"); assert.equal(abierto, 1);
+  const file = {text: async () => JSON.stringify(SB.sync.empaquetar())};
+  cont.onchange({target: {closest: () => ({dataset: {c: "sy-file"}, files: [file], value: ""})}}); await new Promise(r => setTimeout(r, 30));
+  assert.match(cont.innerHTML, /Paso 2 de 2/); assert.match(cont.innerHTML, /Guardar y reemplazar/);
+});
+test("pantalla de sincronización en el celu: cargar a mano (sin la guía) no muestra el paso 2", async () => {
+  const {SB} = abrir(), cont = {innerHTML: "", isConnected: true, querySelector: () => ({click() {}})};
+  const sec = SB.secciones.find(f => { const t = {innerHTML: "", isConnected: true, querySelector: () => null}; f(t); return /Sincronizar PC y celu/.test(t.innerHTML); }); sec(cont);
+  cont.onclick({target: {closest: () => ({dataset: {a: "sy-cargar"}})}});
+  cont.onchange({target: {closest: () => ({dataset: {c: "sy-file"}, files: [{text: async () => JSON.stringify(SB.sync.empaquetar())}], value: ""})}}); await new Promise(r => setTimeout(r, 30));
+  assert.doesNotMatch(cont.innerHTML, /Paso 2 de 2/); assert.match(cont.innerHTML, /ya tenía todo lo del archivo/);
+});

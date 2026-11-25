@@ -6,7 +6,7 @@ const ses = (SB, d, f, sets, fin = 1) => SB.datos("entrenamiento").ses.push({id:
 const BANCA = ["Press banca", 3, 6, 8];
 
 test("entrenamiento: se registra sin fallos, la Papelera lo cubre y se sincroniza por rutina y ses", () => {
-  const {SB} = nuevo(); assert.deepEqual(J(SB.fallos), {}); assert.deepEqual(J(SB.mods.entrenamiento.sync.map(x => x.k)), ["rutina", "ses"]);
+  const {SB} = nuevo(); assert.deepEqual(J(SB.fallos), {}); assert.deepEqual(J(SB.mods.entrenamiento.sync.map(x => x.k)), ["rutina", "ses", "rec"]);
   const d = dia(SB, "Torso A", [BANCA]); ses(SB, d, "2026-11-16", [[80, 8], [80, 8], [80, 8]]); SB.alArrancar[SB.alArrancar.length - 1]();
   SB.datos("entrenamiento").ses.splice(0, 1); SB.guardar("entrenamiento"); assert.equal(SB.datos("papelera").x.length, 1); assert.equal(SB.datos("papelera").x[0].m, "entrenamiento");
 });

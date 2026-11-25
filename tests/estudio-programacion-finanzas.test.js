@@ -116,9 +116,10 @@ test("estudio: avisos — parciales y finales 7, 3 y 1 día antes; entregas 3 y 
 });
 test("estudio: los avisos llegan al service worker en el orden correcto (7, 3, 1 y el mismo día)", () => {
   const {SB} = abrir(), {abrirSW} = require("./helpers"), {avisosPendientes} = abrirSW(); SB.datos("estudio").m.push({id: "m", n: "Álgebra", d: []});
-  SB.datos("estudio").e.push({id: "p", m: "m", k: "parcial", n: "", f: "2026-11-23", nota: null, h: 0}); const ev = J(SB.mods.estudio.avisos()), ya = [], sal = [];
-  for (let d = 14; d <= 24; d++) avisosPendientes(ev, new Date("2026-11-" + d + "T09:00:00"), ya).forEach(x => { ya.push(x.key); sal.push(d + ": " + x.titulo); });
-  assert.deepEqual(sal, ["16: En 7 días: Parcial de Álgebra", "20: En 3 días: Parcial de Álgebra", "22: Mañana: Parcial de Álgebra", "23: Hoy: Parcial de Álgebra"]);
+  const hoy = SB.u.ymd(), f = SB.u.sumar(hoy, 10);                                      // fechas relativas a hoy: no vencen con el calendario
+  SB.datos("estudio").e.push({id: "p", m: "m", k: "parcial", n: "", f, nota: null, h: 0}); const ev = J(SB.mods.estudio.avisos()), ya = [], sal = [];
+  for (let i = 0; i <= 11; i++) avisosPendientes(ev, new Date(SB.u.sumar(hoy, i) + "T09:00:00"), ya).forEach(x => { ya.push(x.key); sal.push(i + ": " + x.titulo); });
+  assert.deepEqual(sal, ["3: En 7 días: Parcial de Álgebra", "7: En 3 días: Parcial de Álgebra", "9: Mañana: Parcial de Álgebra", "10: Hoy: Parcial de Álgebra"]);
 });
 test("estudio: la revisión semanal suma los minutos de los últimos 7 días", () => {
   const {SB} = abrir(), hoy = SB.u.ymd(); SB.datos("estudio").s.push({id: "1", m: "x", f: hoy, min: 90, c: 1}, {id: "2", m: "x", f: SB.u.sumar(hoy, -3), min: 30, c: 2}, {id: "3", m: "x", f: SB.u.sumar(hoy, -20), min: 500, c: 3});

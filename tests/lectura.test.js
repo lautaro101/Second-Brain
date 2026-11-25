@@ -54,7 +54,7 @@ test("lectura: se pueden subir PDF y EPUB a un libro; el archivo va a su propia 
   const {SB, idb, avisos} = conArchivos(), u = L(SB), l = u.crear("Con archivos", "q");
   const el = {querySelector: () => null, set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h; }}; SB.mods.lectura.pantalla(el, l.id);
   const input = {files: [archivo("libro.pdf", 2e6, "application/pdf"), archivo("libro.epub", 5e5), archivo("notas.docx", 100), archivo("enorme.pdf", 400 * 1048576)], value: "x", dataset: {c: "subir"}};
-  await el.onchange({target: {closest: () => input}}); await helpers.dormir(20);
+  await el.onchange({target: {closest: () => input}}); for (let i = 0; i < 100 && l.ar.length < 2; i++) await helpers.dormir(10); await helpers.dormir(20);   // espera a que terminen las subidas (con toda la suite corriendo tarda más de 20 ms)
   assert.deepEqual(J(l.ar.map(a => [a.n, a.t])), [["libro.pdf", "application/pdf"], ["libro.epub", "application/epub+zip"]]);
   const mias = () => [...idb.datos.keys()].filter(k => k.includes("|"));   // el IndexedDB de prueba es uno solo; en el navegador son bases separadas
   assert.equal(mias().length, 2); assert.ok(mias().every(k => k.startsWith(l.id + "|")));
