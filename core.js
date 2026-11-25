@@ -125,6 +125,7 @@ SB.almacen = {leer, poner, quitar, vaciar, usuario: () => { const d = {}; MEM.fo
     [...MEM.keys()].filter(k => USUARIO.test(k)).forEach(quitar); Object.keys(nuevo).forEach(k => poner(k, nuevo[k])); await vaciar();
   }};
 const cfg = () => { const c = leer("sb_cfg", {}); c.off = Array.isArray(c.off) ? c.off : []; return c; };
+SB.avisoActivo = k => (cfg().avx || {})[k] !== false;   // avisos extra (diario, respaldo, semana): prendidos salvo que los apagues en Ajustes (por dispositivo)
 const seguro = (m, f, ...a) => { try { return typeof m[f] === "function" ? m[f](...a) : undefined; } catch (e) { SB.fallos[m.id + "." + f] = e.message; } };
 const activos = () => SB.orden.map(id => SB.mods[id]).filter(m => !cfg().off.includes(m.id));
 const vn = v => String(v).split(".").map(Number), mayor = (a, b) => { const x = vn(a), y = vn(b); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
@@ -333,15 +334,26 @@ function pSemana(el) {
   activos().forEach(m => { const r = seguro(m, "semana"); if (Array.isArray(r) && r.length) h += `<section class="card"><h3>${ic(m.icono)}${esc(m.nombre)}</h3>${r.map(x => `<p>${esc(x)}</p>`).join("")}</section>`; });
   el.innerHTML = `<section class="card"><h3>${ic("📥")}Inbox</h3><p>${n ? n + " cosas sin ordenar: ordenalas antes de arrancar la semana." : "Inbox vacío."}</p></section>${h}`;
 }
+/* Avisos propios del núcleo (no son de un módulo). Se calculan al abrir la app y se los pasan al service worker; el del día solo se muestra ese mismo día. */
+function avisosNucleo() { const out = [], hoy = ymd(), ahora = Date.now();
+  if (SB.avisoActivo("semana")) out.push({f: SB.u.sumar(hoy, (7 - new Date().getDay()) % 7), t: "Revisión semanal", c: "Mirá cómo te fue y planeá la próxima semana.", k: "revision", solo: true, bg: true});
+  const s = leer("sb_sync", null);   // respaldo: hay cambios sin guardar en tu archivo y pasaron más de 7 días
+  if (SB.avisoActivo("respaldo") && s && s.mod && s.ult && ahora - s.ult > 7 * 864e5) out.push({f: hoy, t: "Respaldo", c: "Hace " + Math.floor((ahora - s.ult) / 864e5) + " días que no guardás tu archivo de Drive u OneDrive.", k: "respaldo", solo: true, bg: true});
+  return out; }
+function armarAvisos() { const ev = []; activos().forEach(m => { const a = seguro(m, "avisos"); if (Array.isArray(a)) ev.push(...a); }); try { ev.push(...avisosNucleo()); } catch (e) {} return ev; }
+SB.armarAvisos = armarAvisos;
 function enviarAvisos() { try {
-  const ev = []; activos().forEach(m => { const a = seguro(m, "avisos"); if (Array.isArray(a)) ev.push(...a); });
+  const ev = armarAvisos();
   const c = navigator.serviceWorker && navigator.serviceWorker.controller; if (c) c.postMessage({tipo: "avisos", eventos: ev});
 } catch (e) {} }
 function pAjustes(el) {
   const c = cfg(), fal = Object.keys(SB.fallos), cps = leer("sb_copias", []);
   el.innerHTML = apariencia() + `<section class="card"><h3>Módulos activos</h3>${SB.orden.map(id => { const m = SB.mods[id]; return `<label class="fila"><input type="checkbox" data-c="mod" data-id="${esc(id)}" ${c.off.includes(id) ? "" : "checked"}><span class="tx">${m.icono} ${esc(m.nombre)}<small>esquema de datos v${m.esquema}</small></span></label>`; }).join("")}</section>
   ${fal.length ? `<section class="card aviso-f"><h3>Con problemas</h3>${fal.map(k => `<p>${esc(k)}: ${esc(SB.fallos[k])}</p>`).join("")}<small>Los demás módulos siguen funcionando.</small></section>` : ""}
-  <section class="card"><h3>Avisos</h3><div class="fila-b"><button data-a="avisos">Activar avisos</button><button data-a="prueba">Probar</button></div></section>
+  <section class="card"><h3>Avisos</h3><div class="fila-b"><button data-a="avisos">Activar avisos</button><button data-a="prueba">Probar</button></div>
+    <small>Además de tareas, pagos y fechas, te avisa (en este dispositivo):</small>
+    ${[["diario", "Check-in del diario, si todavía no escribiste nada hoy"], ["respaldo", "Guardar tu archivo de Drive u OneDrive, si pasaron 7 días con cambios sin guardar"], ["semana", "Revisión semanal, los domingos"], ["recuperacion", "Recuperación muscular: cuando pasan 24 o 48 horas de entrenar"]].map(x => `<label class="fila"><input type="checkbox" data-c="avx" data-k="${x[0]}" ${SB.avisoActivo(x[0]) ? "checked" : ""}><span class="tx">${x[1]}</span></label>`).join("")}
+    <small>Los avisos del día se programan al abrir la app. Necesitan la app instalada y los avisos activados.</small></section>
   <div id="ext"></div>
   <section class="card"><h3>Copia de seguridad</h3><div class="fila-b"><button data-a="exportar">Descargar copia</button><label class="btn">Restaurar de archivo<input type="file" accept="application/json" hidden data-c="importar"></label></div>
   ${cps.length ? `<small>Copias automáticas (al actualizar): ${cps.map((x, i) => `<a href="#" data-a="restaurar" data-i="${i}">v${esc(x.v)} · ${new Date(x.t).toLocaleDateString("es-AR")}${x.c ? " 🔒" : ""}</a>`).join(" · ")}</small>` : ""}</section>
@@ -355,6 +367,7 @@ function pAjustes(el) {
   const restaurar = d => SB.almacen.reemplazar(d).then(() => location.reload()).catch(() => alert("No se pudo restaurar."));
   eventos(el, {
     c: (a, n, e) => { if (a === "mod") { const k = cfg(); k.off = k.off.filter(x => x !== n.dataset.id); if (!n.checked) k.off.push(n.dataset.id); poner("sb_cfg", k); pintar(); }
+      if (a === "avx") { const k = cfg(); k.avx = k.avx || {}; k.avx[n.dataset.k] = n.checked; poner("sb_cfg", k); enviarAvisos(); }
       if (a === "importar" && n.files[0]) { const r = new FileReader(); r.onload = async () => { try { let d; try { d = JSON.parse(await SB.abrirTexto(r.result, true)); } catch (x) { if (x instanceof SyntaxError) d = null; else throw x; } if (!d || !d.sb) throw new Error("Ese archivo no es una copia de Second Brain."); if (confirm("Se reemplazan los datos de este dispositivo por los del archivo. ¿Seguro?")) restaurar(d.sb); } catch (x) { alert(x && x.message ? x.message : "Ese archivo no es una copia de Second Brain."); } }; r.readAsText(n.files[0]); } },
     a: (a, n, e) => { if (a === "tema" || a === "letra") { SB.ui.poner({[a]: a === "tema" ? n.dataset.v : +n.dataset.v}); return pintar(); }
       if (a === "restaurar") { e.preventDefault(); const x = cps[+n.dataset.i]; if (x && confirm("Volver a los datos del " + new Date(x.t).toLocaleDateString("es-AR") + "?")) (x.c ? SB.abrirTexto(JSON.stringify(x.c), true).then(t => { const d = JSON.parse(t); if (d && d.cifrado === 1) throw new Error("El cifrado no pudo cargar, así que no se puede abrir esta copia."); return d; }) : Promise.resolve(x.d)).then(restaurar).catch(err => alert(err && err.message ? err.message : "No se pudo abrir la copia.")); }

@@ -124,30 +124,35 @@ function estado(txt, err) { UI.msg = txt || ""; UI.err = !!err; pintarSync(); }
 const hora = t => new Date(t).toLocaleTimeString("es-AR", {hour: "2-digit", minute: "2-digit"});
 function pintarSync() {
   const c = UI.cont; if (!c || !c.isConnected) return;
-  const m = M();
-  c.innerHTML = `<section class="card"><h3>Sincronizar PC y celu${m.mod ? " ●" : ""}</h3>
-    <p class="ayuda">Guardá un archivo <b>.json</b> en tu Google Drive u OneDrive y cargalo en el otro dispositivo. No hace falta cuenta ni servidor. Si tocaste cosas distintas en cada lado, se juntan: en cada nota o tarea queda lo último que cambiaste.</p>
-    ${FS ? `<div class="fila sy"><div class="tx"><span>Archivo vinculado</span><small>${FH ? esc(FH.name) + (SIN_PERMISO ? " · falta el permiso: tocá Sincronizar" : (m.ult ? " · sincronizado " + hora(m.ult) : "")) : "Elegilo una vez y después se actualiza solo"}</small></div>
-      <div class="fila-b">${FH ? `<button type="button" data-a="sy-sync">Sincronizar</button><button type="button" data-a="sy-des">Desvincular</button>` : `<button type="button" data-a="sy-abrir">Elegir archivo</button><button type="button" data-a="sy-nuevo">Crear nuevo</button>`}</div></div>`
-      : `<p class="ayuda">En el celu la página no puede volver a escribir sobre el mismo archivo: cada vez se guarda uno nuevo y vos reemplazás el anterior en Drive u OneDrive. En la PC con Chrome, Edge o Brave sí se puede vincular el archivo y se actualiza solo.</p>`}
-    <div class="fila sy"><div class="tx"><span>Guardar archivo</span><small>${m.ult ? "Último: " + new Date(m.ult).toLocaleString("es-AR") + (m.mod ? " · hay cambios sin guardar" : "") : "Todavía no guardaste ninguno"}</small></div>
-      <div class="fila-b"><button type="button" data-a="sy-guardar">Guardar / compartir</button><button type="button" data-a="sy-descargar">Descargar</button></div></div>
-    <div class="fila sy"><div class="tx"><span>Cargar archivo</span><small>Elegí el .json desde Drive, OneDrive o el teléfono</small></div><div class="fila-b"><button type="button" data-a="sy-cargar">Cargar archivo</button></div></div>
-    <input type="file" hidden data-c="sy-file" accept="application/json,.json,text/plain,application/octet-stream">
-    ${UI.msg ? `<p class="${UI.err ? "sy-err" : "sy-ok"}" role="status">${esc(UI.msg)}</p>` : ""}
-    <small>Antes de guardar, cargá el archivo que ya tengas en Drive: así no pisás lo que cambiaste en el otro dispositivo. "Guardar / compartir" abre el menú del celu para elegir Drive u OneDrive; si no aparece, "Descargar" lo deja en Descargas.</small></section>`;
+  const m = M(), ult = m.ult ? "Último: " + new Date(m.ult).toLocaleString("es-AR") + (m.mod ? " · hay cambios sin guardar" : "") : "Todavía no guardaste ninguno";
+  const msg = UI.msg ? `<p class="${UI.err ? "sy-err" : "sy-ok"}" role="status">${esc(UI.msg)}</p>` : "";
+  const paso2 = UI.paso2 ? `<div class="fila sy"><div class="tx"><span><b>Paso 2 de 2: guardá el archivo actualizado</b></span><small>Ya se juntó lo del archivo con este dispositivo. Falta devolverlo: elegí el mismo lugar de Drive u OneDrive y reemplazá el archivo anterior.</small></div><div class="fila-b"><button type="button" class="pri" data-a="sy-guardar">Guardar y reemplazar</button></div></div>` : "";
+  const manual = `<details><summary>${FS ? "Guardar o cargar a mano" : "Primera vez u otras opciones"}</summary>
+      <div class="fila sy"><div class="tx"><span>Guardar archivo</span><small>${ult}</small></div><div class="fila-b"><button type="button" data-a="sy-guardar">Guardar / compartir</button><button type="button" data-a="sy-descargar">Descargar</button></div></div>
+      <div class="fila sy"><div class="tx"><span>Cargar archivo</span><small>Elegí el .json desde Drive, OneDrive o el teléfono</small></div><div class="fila-b"><button type="button" data-a="sy-cargar">Cargar archivo</button></div></div>
+      <small>«Guardar / compartir» abre el menú del celu para elegir Drive u OneDrive; si no aparece, «Descargar» lo deja en Descargas.</small></details>`;
+  const cuerpo = FS
+    ? `<p class="ayuda">Usás <b>un solo archivo</b> .json en tu Google Drive u OneDrive. Todo se junta, y en cada nota o tarea queda lo último que cambiaste.</p>
+      <div class="fila sy"><div class="tx"><span>Archivo vinculado</span><small>${FH ? esc(FH.name) + (SIN_PERMISO ? " · falta el permiso: tocá Actualizar archivo" : (m.ult ? " · actualizado " + hora(m.ult) : "")) : "Elegilo una vez y después se actualiza solo"}</small></div>
+      <div class="fila-b">${FH ? `<button type="button" class="pri" data-a="sy-sync">Actualizar archivo</button><button type="button" data-a="sy-des">Desvincular</button>` : `<button type="button" data-a="sy-abrir">Elegir archivo</button><button type="button" data-a="sy-nuevo">Crear nuevo</button>`}</div></div>
+      <small>Se actualiza solo unos segundos después de cada cambio, escribiendo sobre el mismo archivo: no elegís nada. Tip: elegí un archivo que esté dentro de la carpeta de OneDrive o Google Drive de esta PC y se sube a la nube solo.</small>${manual}`
+    : `<p class="ayuda">Usás <b>un solo archivo</b> .json en tu Google Drive u OneDrive. Todo se junta, y en cada nota o tarea queda lo último que cambiaste.</p>
+      <div class="fila sy"><div class="tx"><span>Actualizar mi archivo</span><small>${ult}. Son 2 pasos: 1) elegís el archivo que ya tenés en Drive u OneDrive y se junta con este celu; 2) lo guardás de vuelta reemplazando el anterior. Así no pisás lo que cambiaste en el otro dispositivo.</small></div><div class="fila-b"><button type="button" class="pri" data-a="sy-act">Actualizar (paso 1)</button></div></div>
+      ${paso2}<small>Desde el celu la página no puede escribir sola sobre el archivo de Drive u OneDrive (lo impide el navegador), por eso el paso 2 lo confirmás vos. En la PC con Chrome, Edge o Brave se actualiza solo.</small>${manual}`;
+  c.innerHTML = `<section class="card"><h3>Sincronizar PC y celu${m.mod ? " ●" : ""}</h3>${cuerpo}
+    <input type="file" hidden data-c="sy-file" accept="application/json,.json,text/plain,application/octet-stream">${msg}</section>`;
 }
 function bajarArchivo(txt) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], {type: "application/json"})); a.download = ARCH;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
-const listo = () => { const m = M(); m.ult = Date.now(); m.mod = false; guardarM(); SB.copiaHecha(); };
+const listo = () => { UI.paso2 = false; const m = M(); m.ult = Date.now(); m.mod = false; guardarM(); SB.copiaHecha(); };
 async function guardarArchivo(compartir) {
   let txt; try { txt = await SB.sellar(JSON.stringify(empaquetar(), null, 1)); } catch (e) { estado("No se pudo cifrar el archivo: " + e.message, true); return; }
   if (compartir && navigator.canShare && navigator.share) {        // menú de compartir del teléfono: elegís Drive u OneDrive
     try {
       const f = new File([txt], ARCH, {type: "application/json"});
-      if (navigator.canShare({files: [f]})) { await navigator.share({files: [f], title: ARCH}); listo(); estado("Listo. Fijate que el archivo haya quedado en tu Drive u OneDrive.", false); return; }
+      if (navigator.canShare({files: [f]})) { await navigator.share({files: [f], title: ARCH}); listo(); estado("Listo. En Drive u OneDrive elegí la misma carpeta y reemplazá el archivo anterior; fijate que haya quedado ahí.", false); return; }
     } catch (e) { if (e && e.name === "AbortError") return; }
   }
   bajarArchivo(txt); listo(); estado("Se descargó " + ARCH + " (carpeta Descargas). Subilo a tu Google Drive u OneDrive, reemplazando el anterior.", false);
@@ -158,8 +163,8 @@ async function cargarArchivo(file) {
     let msg = res.n ? "Listo: se juntaron " + res.n + (res.n === 1 ? " cambio" : " cambios") + " del archivo." : "Este dispositivo ya tenía todo lo del archivo (o algo más nuevo).";
     if (res.falta) { msg += " Tenés datos más nuevos que el archivo: volvé a guardarlo para actualizarlo."; const m = M(); m.mod = true; guardarM(); }
     if (res.notas.length) msg += " · " + res.notas.join(" · ");
-    estado(msg, res.notas.length > 0);
-  } catch (e) { estado(e instanceof SyntaxError ? "No se pudo leer: el archivo está dañado o no es un .json." : e.message, true); }
+    estado(msg, res.notas.length > 0); return true;
+  } catch (e) { estado(e instanceof SyntaxError ? "No se pudo leer: el archivo está dañado o no es un .json." : e.message, true); return false; }
 }
 
 /* --- archivo vinculado (PC: Chrome, Edge, Brave): se lee, se junta y se vuelve a escribir sobre el MISMO archivo --- */
@@ -203,11 +208,11 @@ SB.secciones.push(cont => {
   SB.u.eventos(cont, {
     a: (a, n) => {
       if (a === "sy-guardar") guardarArchivo(true); else if (a === "sy-descargar") guardarArchivo(false);
-      else if (a === "sy-cargar") { const f = cont.querySelector("input[type=file]"); if (f) f.click(); }
+      else if (a === "sy-cargar" || a === "sy-act") { UI.guiado = a === "sy-act"; if (UI.guiado) UI.paso2 = false; const f = cont.querySelector("input[type=file]"); if (f) f.click(); }
       else if (a === "sy-abrir") vincular(false); else if (a === "sy-nuevo") vincular(true); else if (a === "sy-sync") sincronizarArchivo(true);
       else if (a === "sy-des" && confirm("¿Desvincular el archivo? Tus datos y el archivo quedan como están.")) { FH = null; SIN_PERMISO = false; M().arch = ""; guardarM(); bdSet("h", undefined).catch(() => {}); estado(""); }
     },
-    c: (a, n) => { if (a === "sy-file") { const f = n.files[0]; n.value = ""; if (f) cargarArchivo(f); } }
+    c: (a, n) => { if (a === "sy-file") { const f = n.files[0], g = UI.guiado; n.value = ""; UI.guiado = false; if (f) cargarArchivo(f).then(ok => { if (g && ok) { UI.paso2 = true; pintarSync(); } }); } }
   });
 });
 SB.alArrancar.push(() => {
