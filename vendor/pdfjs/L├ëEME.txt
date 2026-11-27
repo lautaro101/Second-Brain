@@ -1,0 +1,5 @@
+PDF.js (Mozilla) 4.10.38, compilación "legacy" (funciona en navegadores más viejos). Licencia Apache-2.0 (ver LICENSE).
+Origen: paquete npm pdfjs-dist@4.10.38, carpeta legacy/build (pdf.min.mjs y pdf.worker.min.mjs), sin modificar.
+Se usa solo para sacar el texto de los PDF que importás en el módulo Tarjetas, en este dispositivo.
+Se descarga recién la primera vez que importás un PDF (después queda guardado para usar sin conexión). No está en la lista de archivos que se precargan.
+Para actualizarlo: reemplazá los dos .mjs por los de una versión más nueva del mismo paquete y corré `npm test`.

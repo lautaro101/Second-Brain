@@ -1,6 +1,6 @@
 # Second Brain
 
-Organizador de vida personal (PWA sin frameworks ni build). Núcleo: captura rápida, Inbox, búsqueda, Hoy, revisión semanal, ajustes. Módulos: Notas, Tareas, Hábitos, Diario, Estudio, Programación, Finanzas, Colecciones, Entrenamiento, Papelera.
+Organizador de vida personal (PWA sin frameworks ni build). Núcleo: captura rápida, Inbox, búsqueda, Hoy, revisión semanal, ajustes. Módulos: Notas, Tareas, Hábitos, Diario, Estudio, Programación, Finanzas, Colecciones, Entrenamiento, Tarjetas, Papelera.
 
 ## Cómo está armado
 - `index.html`: pantalla de entrada (splash: el logo del ícono que se dibuja, nombre, barra de carga y versión; una vez por apertura según `sessionStorage`, mínimo 2,4 s, tope 3,5 s, se cierra al tocarla, respeta «reducir movimiento» y avisa si `version.js` no llega en 7 s), estilos, arranque y carga de módulos (uno por uno: si uno falla, los demás siguen).
@@ -88,3 +88,4 @@ Cada libro puede tener archivos (`l.ar`: nombre, tamaño y tipo). El contenido v
 
 ### Importar y metas (Lectura)
 **Importar**: `util.importar(texto)` lee una lista («Título - Autor») o una tabla con encabezados (coma, punto y coma o tabulador; entiende comillas y el CSV de Goodreads: Title, Author, Number of Pages, My Rating, Date Read, Exclusive Shelf, Binding). Salta los libros que ya están (mismo título y autor). Si el libro viene leído, queda con el 100 % y las fechas del archivo. **Metas** (`meta`: `{libros, pags}` dentro de los datos del módulo): libros por año, comparado con lo que deberías llevar a esta altura del año, y páginas por día. La **racha** cuenta los días seguidos que llegaste a la meta de páginas (o a 1 página si no hay meta); hoy no la corta hasta que termina el día. La primera anotación de un libro que ya venías leyendo es solo el punto de partida y no suma páginas ese día.
+- `vendor/pdfjs/`: PDF.js de Mozilla (Apache-2.0), la única librería de terceros. Solo se usa para leer el texto de los PDF que importás en Tarjetas, en este dispositivo; se descarga recién la primera vez que importás uno y no está en la lista de archivos que se precargan. Ver `vendor/pdfjs/LÉEME.txt` para actualizarla.

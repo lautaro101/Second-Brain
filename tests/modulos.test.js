@@ -2,7 +2,7 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const {abrir, modulo, J} = require("./helpers");
 
 test("los módulos se registran sin fallos y todos se pueden prender y apagar desde Ajustes", () => {
-  const {SB} = abrir(); assert.deepEqual(J(SB.fallos), {}); assert.deepEqual([...SB.orden], ["notas", "tareas", "habitos", "diario", "estudio", "programacion", "finanzas", "colecciones", "entrenamiento", "lectura", "objetivos", "papelera"]);
+  const {SB} = abrir(); assert.deepEqual(J(SB.fallos), {}); assert.deepEqual([...SB.orden], ["notas", "tareas", "habitos", "diario", "estudio", "programacion", "finanzas", "colecciones", "entrenamiento", "tarjetas", "lectura", "objetivos", "papelera"]);
 });
 test("un módulo con definición incompleta o repetida no tira abajo a los demás", () => {
   const {SB} = abrir({archivos: [modulo("a"), {nombre: "roto", codigo: "SB.registrar({id:'roto'})"}, modulo("a"), modulo("b")]});
