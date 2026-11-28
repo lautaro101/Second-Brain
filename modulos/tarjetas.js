@@ -11,7 +11,7 @@
 (function () {
 const {esc, norm, ymd, uid, sumar, dmy, eventos} = SB.u, D = () => SB.datos("tarjetas");
 const MAXTX = 100000, MAXARCH = 15 * 1024 * 1024;
-const TIPOS = {d: "Definición", p: "Pregunta", c: "Completar", s: "Sección", m: "Manual"};
+const TIPOS = {d: "Definición", p: "Pregunta", c: "Completar", s: "Sección", m: "Manual", i: "IA"};
 
 /* ======================= lectores de archivos ======================= */
 const ents = {amp: "&", lt: "<", gt: ">", quot: '"', apos: "'"};
@@ -186,8 +186,87 @@ const acerto = (p, r) => p.ty === "es" ? !!(r && r.ok === true) : r === p.ok;
 const notaDe = (ok, n) => n ? Math.round(100 * ok / n) / 10 : 0;
 const fmtNota = n => String(n).replace(".", ",");
 
+/* ======================= con IA local (opcional, ver ia.js) ======================= */
+const ia = () => (window.SB && SB.ia && SB.ia.disponible()) ? SB.ia : null;
+const ESQ_TARJETAS = {type: "object", properties: {tarjetas: {type: "array", items: {type: "object", properties: {frente: {type: "string"}, dorso: {type: "string"}}, required: ["frente", "dorso"]}}}, required: ["tarjetas"]};
+const ESQ_CORREGIR = {type: "object", properties: {correcto: {type: "boolean"}, explicacion: {type: "string"}}, required: ["correcto", "explicacion"]};
+const SISTEMA = "Sos un docente que prepara material de estudio en español. Usás solo la información que está en el texto o en lo que te piden: no inventes datos ni agregues cosas de afuera.";
+/* Parte un texto largo en trozos de unos n caracteres, cortando en renglones o, si hace falta, en espacios. */
+function trozos(texto, n = 3500) {
+  const out = []; let cur = "";
+  String(texto || "").replace(/\r/g, "").split("\n").forEach(l => {
+    l = l.trim(); if (!l) return;
+    while (l.length > n) { let cut = l.lastIndexOf(" ", n); if (cut < n / 2) cut = n; if (cur) { out.push(cur); cur = ""; } out.push(l.slice(0, cut)); l = l.slice(cut).trim(); }
+    if (cur && cur.length + l.length + 1 > n) { out.push(cur); cur = ""; } cur = cur ? cur + "\n" + l : l;
+  });
+  if (cur) out.push(cur); const res = [];   // un trozo muy corto se une al anterior en vez de perderse
+  out.forEach(c => { if (res.length && c.length < 200) res[res.length - 1] += "\n" + c; else res.push(c); }); return res;
+}
+function jsonDe(txt) {   // saca el JSON de una respuesta, aunque venga con ```json … ``` o con texto alrededor
+  const t = String(txt || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, ""), a = [t.indexOf("{"), t.indexOf("[")].filter(i => i >= 0).sort((x, y) => x - y)[0];
+  if (a === undefined) return null; const b = Math.max(t.lastIndexOf("}"), t.lastIndexOf("]")); try { return JSON.parse(t.slice(a, b + 1)); } catch (e) { return null; }
+}
+function tarjetasDeRespuesta(txt) {
+  const j = jsonDe(txt), arr = Array.isArray(j) ? j : j && typeof j === "object" ? (j.tarjetas || j.flashcards || j.cards || j.preguntas || []) : [];
+  const out = (Array.isArray(arr) ? arr : []).map(x => x && typeof x === "object" ? {t: sinSalto(String(x.frente || x.pregunta || x.front || x.q || "")), a: sinSalto(String(x.dorso || x.respuesta || x.back || x.a || ""))} : null).filter(x => x && x.t && x.a);
+  return out.length ? out : parsearTarjetas(txt).map(x => ({t: x.t, a: x.a}));
+}
+/* Control contra inventos: ¿lo que dice el dorso aparece en el texto? Se comparan las raíces (5 letras) de las palabras de contenido; las respuestas cortas (un año, una sigla) tienen que estar tal cual. */
+function fundada(dorso, texto) {
+  const nt = norm(texto), pal = [...new Set(norm(dorso).split(/[^a-z0-9ñ]+/).filter(w => w.length >= 5))];
+  if (!pal.length) return nt.includes(norm(dorso).trim());
+  return pal.filter(w => nt.includes(w.slice(0, 5))).length / pal.length >= 0.5;
+}
+async function generarConIA(texto, op) {
+  op = op || {}; const I = ia(); if (!I) throw new Error("La IA no está activada: activala en Ajustes → IA local.");
+  const todas = trozos(texto), usar = todas.slice(0, op.max || 12), out = [], vistos = new Set(); let fallidas = 0, error = "";
+  for (let i = 0; i < usar.length; i++) {
+    if (op.signal && op.signal.aborted) break; if (op.onProgreso) op.onProgreso(i + 1, usar.length);
+    let r; try { r = await I.chat([{role: "system", content: SISTEMA}, {role: "user", content: "Del siguiente material creá hasta 8 tarjetas de estudio (flashcards). Cada tarjeta tiene un frente (una pregunta concreta que se entienda sin ver el texto) y un dorso (la respuesta breve, de una o dos oraciones). Evitá las preguntas de sí o no y las demasiado generales; cubrí lo más importante. Respondé solo con JSON.\n\nMaterial:\n" + usar[i]}], {formato: ESQ_TARJETAS, signal: op.signal}); }
+    catch (e) { if (e.tipo === "cancelado") break; if (!out.length) throw e; error = e.message; break; }
+    const its = tarjetasDeRespuesta(r); if (!its.length) { fallidas++; continue; }
+    its.forEach(x => { const k = norm(x.t); if (vistos.has(k) || x.t.length > 400) return; vistos.add(k); const ok = fundada(x.a, usar[i]); out.push({t: x.t, a: x.a.slice(0, 700), tp: "i", ok, rev: !ok}); });
+  }
+  return {items: out, partes: usar.length, total: todas.length, fallidas, error};
+}
+async function corregirConIA(pregunta, esperada, dada, op) {
+  const I = ia(); if (!I) throw new Error("La IA no está activada: activala en Ajustes → IA local."); if (!String(dada || "").trim()) return {ok: false, expl: "No escribiste nada."};
+  const r = await I.chat([{role: "system", content: "Corregís respuestas de estudiantes con criterio justo: aceptás sinónimos, otra redacción y errores de ortografía, y no exigís las mismas palabras. Marcás incorrecto solo si falta lo esencial o dice algo falso."}, {role: "user", content: "Pregunta: " + pregunta + "\nRespuesta esperada: " + esperada + "\nRespuesta del estudiante: " + dada + "\n\nDevolvé JSON con «correcto» (true o false) y «explicacion» (una o dos oraciones en español)."}], {formato: ESQ_CORREGIR, signal: op && op.signal}), j = jsonDe(r);
+  if (!j || typeof j.correcto !== "boolean") throw new Error("La IA devolvió una respuesta que no pude leer. Corregí vos con «Acerté / Fallé».");
+  return {ok: j.correcto, expl: sinSalto(String(j.explicacion || "")).slice(0, 400)};
+}
+async function explicarConIA(pregunta, correcta, tuya, op) {
+  const I = ia(); if (!I) throw new Error("La IA no está activada: activala en Ajustes → IA local.");
+  const t = await I.chat([{role: "system", content: SISTEMA}, {role: "user", content: "Pregunta: " + pregunta + "\nRespuesta correcta: " + correcta + "\nLo que respondió el estudiante: " + tuya + "\n\nExplicá en dos o tres oraciones por qué la respuesta correcta es esa y en qué se equivocó el estudiante. Si no estás seguro de algo, decilo."}], {signal: op && op.signal, temperatura: 0.3});
+  return sinSalto(t).slice(0, 700);
+}
+const textosFallo = (p, r) => ({mia: p.ty === "op" ? (r === undefined ? "sin responder" : p.ops[r]) : p.ty === "vf" ? (r === undefined ? "sin responder" : r ? "Verdadero" : "Falso") : (r && r.txt) || "sin responder", cor: p.ty === "op" ? p.ops[p.ok] : p.ty === "vf" ? (p.ok ? "Verdadero" : "Falso (era: " + (D().t.find(t => t.id === p.c) || {a: "?"}).a + ")") : p.resp});
+const realResp = p => p.ty === "op" ? p.ops[p.ok] : p.ty === "vf" ? (D().t.find(t => t.id === p.c) || {a: "?"}).a : p.resp;
+
+const GUIA = `<section class="card"><h3>❓ Cómo se usa Tarjetas</h3><p class="ayuda">Tarjetas sirve para estudiar de memoria: armás mazos con una pregunta de un lado y la respuesta del otro, los repasás cada día y tomás exámenes. Todo se guarda en este dispositivo y se sincroniza con tu archivo, como el resto de la app.</p>
+  <details open><summary>1. Armar un mazo</summary><p class="ayuda">Tocá <b>＋ Mazo</b>, ponele un nombre y abrilo. Hay cuatro formas de agregar tarjetas:</p><ul>
+    <li><b>Desde un material:</b> elegí un archivo <b>.txt, .md, .docx o .pdf</b> o pegá el texto. La app propone tarjetas y vos elegís cuáles guardar. Los .doc viejos no se pueden leer (guardalos como .docx) y los PDF escaneados tampoco, porque son imágenes. La primera vez que importás un PDF hace falta internet.</li>
+    <li><b>A mano:</b> escribís el frente y el dorso.</li>
+    <li><b>Pegar tarjetas ya hechas:</b> una por línea, <b>frente ;; dorso</b>. También sirve lo que exporta Anki.</li>
+    <li><b>Con Claude u otra IA:</b> «Copiar el pedido para Claude» copia un pedido listo; lo pegás en una conversación con tu material y traés el resultado con «Pegar tarjetas ya hechas».</li></ul></details>
+  <details><summary>2. Cómo escribir los apuntes para que salgan buenas tarjetas</summary><p class="ayuda">La app no entiende el texto: busca patrones. Cuanto más ordenados tus apuntes, mejores las tarjetas:</p><ul>
+    <li><b>Definiciones:</b> <i>Mitocondria: organela que produce energía.</i> (también con = o –). En Word sirve una tabla de dos columnas: término y definición.</li>
+    <li><b>Preguntas con su respuesta:</b> una línea con <i>¿Qué es el ADN?</i> y la respuesta en el renglón de abajo.</li>
+    <li><b>Frases para completar:</b> pone un hueco en la palabra clave si está en <b>negrita</b>, o es un año, una cifra con unidad, una sigla o un nombre propio.</li>
+    <li><b>«X es …»</b> se vuelve la pregunta «¿Qué es X?». Las «Secciones» (título + párrafo) están apagadas porque salen menos precisas.</li>
+    <li>Con prosa corrida sin esas marcas salen pocas tarjetas. Ahí ayuda la IA local (opcional) o Claude.</li></ul><p class="ayuda">Antes de guardar, destildá las que no sirvan; después podés editarlas con ✏️.</p></details>
+  <details><summary>3. Repasar</summary><p class="ayuda">Tocá <b>Repasar</b>, mirá el frente, pensá la respuesta y tocá <b>Mostrar respuesta</b>. Después elegí cómo te fue:</p><ul>
+    <li><b>Otra vez:</b> no la sabías. Vuelve en esta misma sesión (hasta 3 veces) y mañana otra vez.</li>
+    <li><b>Difícil:</b> la sabías con esfuerzo. Vuelve pronto.</li>
+    <li><b>Bien:</b> la ves en 1 día, después en 3, y cada vez con más separación.</li>
+    <li><b>Fácil:</b> la separa más todavía.</li></ul><p class="ayuda">Cada día te muestra las que vencen y hasta 15 tarjetas nuevas (lo cambiás al pie de la pantalla de mazos). Si repasás un poco todos los días, aprendés más que con una sesión larga de vez en cuando. Aparece en <b>Hoy</b> cuando hay algo para repasar.</p></details>
+  <details><summary>4. Exámenes</summary><p class="ayuda">Tocá <b>📝 Examen</b>, elegí el mazo, cuántas preguntas y el tipo: <b>opción múltiple</b> (las opciones falsas salen de otras tarjetas), <b>verdadero o falso</b>, <b>escribir la respuesta</b> (te corregís vos con «Acerté / Fallé») o mixto. Al final ves la nota sobre 10 y qué fallaste. Lo que fallás vuelve a tocar hoy en el repaso, y podés repasar solo esas. Hacen falta al menos dos tarjetas, y para opción múltiple, cuatro respuestas distintas.</p></details>
+  <details><summary>5. IA local (opcional)</summary><p class="ayuda">Si instalás Ollama en tu PC, la IA puede crear tarjetas desde prosa corrida (<b>Generar más con IA</b>), corregir tus respuestas escritas (<b>Corregir con IA</b>) y explicarte lo que fallaste (<b>Explicame</b>). Está apagada por defecto, no manda nada a internet y puede equivocarse: revisá lo que propone. La guía para instalarla está en <b>Ajustes → IA local</b>.</p></details>
+  <details><summary>6. Cosas para saber</summary><ul><li>Un mazo con más de 150 tarjetas es demasiado grande para la Papelera: al borrarlo no se puede recuperar. Los más chicos quedan 30 días en la Papelera.</li><li>Los materiales que importás se guardan (hasta 100 mil caracteres cada uno) para volver a proponer tarjetas más tarde.</li><li>Podés asociar un mazo a una materia de Estudio.</li></ul></details>
+  <div class="fila-b"><button class="pri" data-a="ir" data-v="inicio">Entendido</button></div></section>`;
+
 /* ======================= estado de la pantalla ======================= */
-let vista = "inicio", mz = "", rep = null, exm = null, cand = null, filtro = "", lim = 40, editar = "", msg = "", cargando = false;
+let vista = "inicio", mz = "", rep = null, exm = null, cand = null, filtro = "", lim = 40, editar = "", msg = "", msgErr = false, cargando = false, trab = null;
 const mazo = id => D().z.find(x => x.id === id), nomMazo = id => (mazo(id) || {n: "(mazo borrado)"}).n;
 const materias = () => { try { return SB.mods.estudio && SB.datos("estudio") ? SB.datos("estudio").m || [] : []; } catch (e) { return []; } };
 const nomMateria = id => { const m = materias().find(x => x.id === id); return m ? m.n : ""; };
@@ -221,7 +300,7 @@ SB.registrar({
   id: "tarjetas", nombre: "Tarjetas", icono: "🃏", esquema: 1,
   inicial: () => ({z: [], t: [], mt: [], ex: [], rv: {}, np: 15}), migraciones: {},
   sync: [{k: "z", orden: "asc"}, {k: "t", orden: "asc", t: x => x.c || 0}, {k: "mt", orden: "desc", t: x => x.c || 0}, {k: "ex", orden: "desc", t: x => x.c || 0}],
-  util: {leerDocx, docxATexto, leerPdf, leerArchivo, generar, parsearTarjetas, pedidoClaude, calificar, cola, armarExamen, acerto, notaDe, reflujo, claveDe, agregarTarjetas, estado: () => ({vista, rep, exm, cand})},
+  util: {leerDocx, docxATexto, leerPdf, leerArchivo, generar, parsearTarjetas, pedidoClaude, calificar, cola, armarExamen, acerto, notaDe, reflujo, claveDe, agregarTarjetas, trozos, tarjetasDeRespuesta, fundada, generarConIA, corregirConIA, explicarConIA, estado: () => ({vista, rep, exm, cand, trab})},
   hoy() { const n = cola(null, ymd()).length; return n ? [{t: "Repasar tarjetas", s: n + (n === 1 ? " tarjeta" : " tarjetas") + " para hoy", ir: "#/tarjetas/repasar", hecho: false}] : []; },
   buscar: q => { const k = norm(q), r = []; D().z.filter(z => norm(z.n).includes(k)).forEach(z => r.push({t: z.n, s: "Mazo · " + D().t.filter(t => t.z === z.id).length + " tarjetas"}));
     D().t.filter(t => norm(t.t + " " + t.a).includes(k)).slice(0, 8).forEach(t => r.push({t: t.t, s: t.a.slice(0, 80) + " · " + nomMazo(t.z)})); return r; },
@@ -235,26 +314,28 @@ SB.registrar({
   pantalla(el, sub) {
     if (sub === "repasar" && vista !== "repaso") { vista = "inicio"; empezarRepaso(null); try { history.replaceState(null, "", "#/tarjetas"); } catch (e) {} }   // se consume el atajo: al terminar no vuelve a empezar
     const d = D(), hoy = ymd(); if (vista === "mazo" && !mazo(mz)) vista = "inicio";
-    let h = msg ? `<p class="${/^(No |Hacen|El archivo|Este|Los |Formato)/.test(msg) ? "sy-err" : "sy-ok"}" role="status">${esc(msg)}</p>` : ""; msg = "";
+    let h = msg ? `<p class="${msgErr || /^(No |Hacen|El archivo|Este|Los |Formato)/.test(msg) ? "sy-err" : "sy-ok"}" role="status">${esc(msg)}</p>` : ""; msg = ""; msgErr = false;
     const volver = `<button class="chip" data-a="ir" data-v="inicio">← Mazos</button>`, mats = materias();
-    if (vista === "repaso" && rep) {
+    const bloqueIA = () => ia() ? (trab && trab.tipo === "gen" ? `<p class="ayuda">✨ ${esc(trab.txt)}</p><button data-a="ia-cancelar">Cancelar</button>` : `<button data-a="ia-gen"${trab ? " disabled" : ""}>✨ Generar más con IA</button><p class="ayuda">La IA lee el material por partes y puede equivocarse: revisá lo que propone antes de guardarlo.</p>`) : `<p class="ayuda">Si conectás una IA local en Ajustes, también puede crear tarjetas desde prosa corrida.</p>`;
+    if (vista === "guia") { h += GUIA; }
+    else if (vista === "repaso" && rep) {
       const t = D().t.find(x => x.id === rep.ids[rep.i]);
       if (!t || rep.i >= rep.ids.length) { const r = rep; h += `<section class="card"><h3>🎉 Repaso terminado</h3><p>Repasaste ${r.vistas} ${r.vistas === 1 ? "tarjeta" : "tarjetas"} y acertaste ${r.bien}.</p><button class="pri" data-a="ir" data-v="${mz && mazo(mz) ? "mazo" : "inicio"}">Listo</button></section>`; }
       else h += `<div class="fila-b"><button class="chip" data-a="salir-repaso">✕ Salir</button><small>${rep.i + 1} de ${rep.ids.length} · ${esc(nomMazo(t.z))}</small></div><section class="card tj"><p class="tj-t">${esc(t.t)}</p>${rep.mostrar ? `<hr><p class="tj-a">${esc(t.a)}</p><div class="tj-n"><button data-a="nota" data-q="0" class="x">Otra vez</button><button data-a="nota" data-q="1">Difícil</button><button data-a="nota" data-q="2" class="pri">Bien</button><button data-a="nota" data-q="3">Fácil</button></div>` : `<button class="pri" data-a="mostrar">Mostrar respuesta</button>`}</section>`;
     } else if (vista === "examen" && exm) {
       const e = exm;
       if (e.listo) { const r = e.res, malos = e.ps.map((p, i) => ({p, i})).filter(x => !acerto(x.p, e.resp[x.i])); h += `<section class="card"><h3>Resultado: ${fmtNota(r.nota)} sobre 10</h3><p>${r.ok} de ${r.p} bien (${Math.round(100 * r.ok / r.p)} %).</p>${malos.length ? `<button data-a="repasar-fallos">Repasar las ${malos.length} que fallé</button>` : "<p>¡Todo bien! 🎉</p>"}<button class="pri" data-a="ir" data-v="${mz && mazo(mz) ? "mazo" : "inicio"}">Listo</button></section>`
-        + (malos.length ? `<section class="card"><h3>Lo que fallaste</h3>${malos.map(({p, i}) => { const r2 = e.resp[i], mia = p.ty === "op" ? (r2 === undefined ? "sin responder" : p.ops[r2]) : p.ty === "vf" ? (r2 === undefined ? "sin responder" : r2 ? "Verdadero" : "Falso") : (r2 && r2.txt) || "sin responder", cor = p.ty === "op" ? p.ops[p.ok] : p.ty === "vf" ? (p.ok ? "Verdadero" : "Falso (era: " + (D().t.find(t => t.id === p.c) || {a: "?"}).a + ")") : p.resp; return `<div class="fila"><div class="tx"><span>${esc(p.q)}</span><small>Tu respuesta: ${esc(mia)}</small><small>Correcta: <b>${esc(cor)}</b></small></div></div>`; }).join("")}</section>` : ""); }
+        + (malos.length ? `<section class="card"><h3>Lo que fallaste</h3>${malos.map(({p, i}) => { const {mia, cor} = textosFallo(p, e.resp[i]); return `<div class="fila"><div class="tx"><span>${esc(p.q)}</span><small>Tu respuesta: ${esc(mia)}</small><small>Correcta: <b>${esc(cor)}</b></small>${e.expl && e.expl[i] ? `<small>🤖 ${esc(e.expl[i])}</small>` : ia() ? (trab && trab.tipo === "expl" && trab.i === i ? `<small>🤖 Pensando…</small>` : `<button class="chip" data-a="ia-expl" data-i="${i}"${trab ? " disabled" : ""}>🤖 Explicame</button>`) : ""}</div></div>`; }).join("")}${e.expl && Object.keys(e.expl).length ? `<p class="ayuda">Las explicaciones las genera una IA y pueden tener errores: verificalas con tu material.</p>` : ""}</section>` : ""); }
       else { const p = e.ps[e.i], r = e.resp[e.i], resp = r !== undefined && (p.ty !== "es" || (r && r.ok !== undefined));
         h += `<div class="fila-b"><button class="chip" data-a="salir-examen">✕ Salir</button><small>Pregunta ${e.i + 1} de ${e.ps.length}</small></div><progress max="${e.ps.length}" value="${e.i}"></progress><section class="card"><p class="tj-t">${p.ty === "vf" ? "¿Verdadero o falso?<br><small>" + esc(p.q) + "</small><br><b>" + esc(p.mostrar) + "</b>" : esc(p.q)}</p>`
           + (p.ty === "op" ? p.ops.map((o, k) => `<button class="op${r === k ? " sel" : ""}" data-a="opcion" data-i="${k}">${esc(o)}</button>`).join("") : p.ty === "vf" ? `<div class="tj-n"><button class="op${r === true ? " sel" : ""}" data-a="vf" data-v="1">Verdadero</button><button class="op${r === false ? " sel" : ""}" data-a="vf" data-v="0">Falso</button></div>`
-          : r && r.rev ? `<p>Tu respuesta: ${esc(r.txt || "(vacía)")}</p><p>Respuesta: <b>${esc(p.resp)}</b></p><div class="tj-n"><button class="op${r.ok === true ? " sel" : ""}" data-a="acerte">Acerté</button><button class="op${r.ok === false ? " sel" : ""}" data-a="falle">Fallé</button></div>` : `<textarea rows="2" placeholder="Escribí tu respuesta" data-c="escrita" aria-label="Tu respuesta">${esc(r && r.txt || "")}</textarea><button class="pri" data-a="revelar">Ver la respuesta</button>`)
+          : r && r.rev ? `<p>Tu respuesta: ${esc(r.txt || "(vacía)")}</p><p>Respuesta: <b>${esc(p.resp)}</b></p>${r.ia ? `<p class="ayuda">🤖 ${esc(r.ia)} <small>(la IA puede equivocarse: si no coincide, elegí vos)</small></p>` : ""}<div class="tj-n"><button class="op${r.ok === true ? " sel" : ""}" data-a="acerte">Acerté</button><button class="op${r.ok === false ? " sel" : ""}" data-a="falle">Fallé</button></div>` : `<textarea rows="2" placeholder="Escribí tu respuesta" data-c="escrita" aria-label="Tu respuesta">${esc(r && r.txt || "")}</textarea>${ia() ? (trab && trab.tipo === "corr" ? `<p class="ayuda">🤖 Corrigiendo…</p>` : `<button data-a="ia-corregir">🤖 Corregir con IA</button>`) : ""}<button class="pri" data-a="revelar">Ver la respuesta</button>`)
           + `<button class="pri" data-a="siguiente"${resp ? "" : " disabled"}>${e.i + 1 === e.ps.length ? "Terminar examen" : "Siguiente"}</button></section>`; }
     } else if (vista === "cand" && cand) {
       const n = cand.items.filter(x => x.ok).length;
       h += `<div class="fila-b">${volver}</div><section class="card"><h3>Tarjetas propuestas</h3><p class="ayuda">De «${esc(cand.nombre)}»${cand.pdf ? " (PDF)" : ""}. Destildá las que no sirvan: después podés editarlas en el mazo. ${cand.items.length ? "" : "No encontré definiciones, preguntas ni frases con palabra clave. Probá activar «Secciones», o pegá tarjetas ya hechas."}</p>
-        <form data-f="gen-opts"><div class="fila-b">${[["d", "Definiciones"], ["p", "Preguntas"], ["c", "Completar"], ["s", "Secciones"]].map(([k, t]) => `<label class="chip${cand.op[k] ? " on" : ""}"><input type="checkbox" name="${k}"${cand.op[k] ? " checked" : ""} hidden>${t}</label>`).join("")}<button>Volver a buscar</button></div></form></section>`
-        + (cand.items.length ? `<section class="card"><div class="fila-b"><button class="chip" data-a="cand-todas">${n === cand.items.length ? "Destildar todas" : "Tildar todas"}</button><small>${n} de ${cand.items.length}</small></div>${cand.items.map((x, i) => `<div class="fila"><label class="tx"><span><input type="checkbox" data-c="cand-sel" data-i="${i}"${x.ok ? " checked" : ""}> ${esc(x.t)}</span><small>${esc(x.a)}</small><small>${TIPOS[x.tp] || ""}</small></label></div>`).join("")}<button class="pri" data-a="cand-guardar"${n ? "" : " disabled"}>Agregar ${n} al mazo</button></section>` : "");
+        <form data-f="gen-opts"><div class="fila-b">${[["d", "Definiciones"], ["p", "Preguntas"], ["c", "Completar"], ["s", "Secciones"]].map(([k, t]) => `<label class="chip${cand.op[k] ? " on" : ""}"><input type="checkbox" name="${k}"${cand.op[k] ? " checked" : ""} hidden>${t}</label>`).join("")}<button>Volver a buscar</button></div></form>${bloqueIA()}</section>`
+        + (cand.items.length ? `<section class="card"><div class="fila-b"><button class="chip" data-a="cand-todas">${n === cand.items.length ? "Destildar todas" : "Tildar todas"}</button><small>${n} de ${cand.items.length}</small></div>${cand.items.map((x, i) => `<div class="fila"><label class="tx"><span><input type="checkbox" data-c="cand-sel" data-i="${i}"${x.ok ? " checked" : ""}> ${esc(x.t)}</span><small>${esc(x.a)}</small><small>${TIPOS[x.tp] || ""}${x.rev ? " · ⚠️ revisar: la respuesta no parece estar en el texto" : ""}</small></label></div>`).join("")}<button class="pri" data-a="cand-guardar"${n ? "" : " disabled"}>Agregar ${n} al mazo</button></section>` : "");
     } else if (vista === "exam-cfg") {
       const zs = d.z.filter(z => D().t.some(t => t.z === z.id));
       h += `<div class="fila-b">${volver}</div><section class="card"><h3>Tomar un examen</h3>${zs.length ? `<form data-f="exam-ir"><label class="tx"><span>Mazo</span><select name="z">${zs.length > 1 ? `<option value="">Todos los mazos</option>` : ""}${zs.map(z => `<option value="${esc(z.id)}"${z.id === mz ? " selected" : ""}>${esc(z.n)} (${D().t.filter(t => t.z === z.id).length})</option>`).join("")}</select></label>
@@ -273,7 +354,7 @@ SB.registrar({
         + `<section class="card"><h3>Tarjetas</h3>${c.n > 8 ? `<input type="search" data-c="filtro" placeholder="Buscar en este mazo…" value="${esc(filtro)}" aria-label="Buscar tarjetas">` : ""}${ts.length ? ts.slice(0, lim).map(t => editar === t.id ? `<form data-f="tarjeta-guardar" data-id="${esc(t.id)}"><textarea name="t" rows="2" required aria-label="Frente">${esc(t.t)}</textarea><textarea name="a" rows="2" required aria-label="Dorso">${esc(t.a)}</textarea><button class="pri">Guardar</button><button type="button" class="x" data-a="tj-edit" data-id="">Cancelar</button></form>` : `<div class="fila"><div class="tx"><span>${esc(t.t)}</span><small>${esc(t.a)}</small><small>${TIPOS[t.tp] || ""} · ${t.ul ? "próximo repaso " + dmy(t.v) : "nueva"}</small></div><button class="x" data-a="tj-edit" data-id="${esc(t.id)}" aria-label="Editar">✏️</button><button class="x" data-a="tj-del" data-id="${esc(t.id)}" aria-label="Borrar">✕</button></div>`).join("") + (ts.length > lim ? `<button data-a="mas">Ver más (${ts.length - lim})</button>` : "") : `<p class="vacio">${c.n ? "Ninguna coincide." : "Todavía no hay tarjetas."}</p>`}</section>`;
     } else {
       vista = "inicio"; const n = cola(null, hoy).length, ultimos = d.ex.slice(0, 5);
-      h += `<section class="card"><h3>Hoy</h3><p>${n ? n + (n === 1 ? " tarjeta para repasar" : " tarjetas para repasar") : d.t.length ? "No tenés nada para repasar. 🎉" : "Armá tu primer mazo."}</p><div class="fila-b"><button class="pri" data-a="repasar" data-z=""${n ? "" : " disabled"}>Repasar todo (${n})</button><button data-a="examen" data-z="">📝 Tomar examen</button></div></section>`
+      h += `<section class="card"><div class="fila"><h3>Hoy</h3><button class="chip" data-a="guia">❓ Guía</button></div><p>${n ? n + (n === 1 ? " tarjeta para repasar" : " tarjetas para repasar") : d.t.length ? "No tenés nada para repasar. 🎉" : "Armá tu primer mazo."}</p><div class="fila-b"><button class="pri" data-a="repasar" data-z=""${n ? "" : " disabled"}>Repasar todo (${n})</button><button data-a="examen" data-z="">📝 Tomar examen</button></div></section>`
         + (d.z.length ? d.z.map(z => { const c = conteo(z.id, hoy); return `<section class="card"><div class="fila"><div class="tx"><span>${esc(z.n)}</span><small>${c.n} tarjetas · ${c.venc} para repasar · ${c.nuevas} nuevas${z.m && nomMateria(z.m) ? " · 📚 " + esc(nomMateria(z.m)) : ""}</small></div><button data-a="abrir" data-z="${esc(z.id)}">Abrir</button></div></section>`; }).join("") : `<p class="vacio">Todavía no hay mazos.</p>`)
         + `<section class="card"><form data-f="mazo-nuevo"><div class="fila-b"><input name="n" placeholder="Nuevo mazo (ej: Biología unidad 1)" required autocomplete="off" aria-label="Nombre del mazo"><button>＋ Mazo</button></div>${mats.length ? `<select name="m" aria-label="Materia de Estudio"><option value="">Sin materia</option>${mats.map(m => `<option value="${esc(m.id)}">${esc(m.n)}</option>`).join("")}</select>` : ""}</form></section>`
         + (ultimos.length ? `<section class="card"><h3>Últimos exámenes</h3>${ultimos.map(e => `<div class="fila"><div class="tx"><span>${esc(e.n)}</span><small>${dmy(e.f)} · ${e.ok}/${e.p} bien</small></div><b>${fmtNota(e.nota)}</b></div>`).join("")}</section>` : "")
@@ -285,6 +366,7 @@ SB.registrar({
       a: (a, n) => {
         const z = n.dataset.z;
         if (a === "ir") { vista = n.dataset.v === "mazo" && mazo(mz) ? "mazo" : "inicio"; rep = exm = cand = null; editar = ""; filtro = ""; lim = 40; }
+        else if (a === "guia") vista = "guia";
         else if (a === "abrir") { mz = z; vista = "mazo"; filtro = ""; lim = 40; editar = ""; }
         else if (a === "repasar") { if (z) mz = z; empezarRepaso(z ? [z] : null); }
         else if (a === "mostrar" && rep) rep.mostrar = true;
@@ -298,6 +380,17 @@ SB.registrar({
         else if ((a === "acerte" || a === "falle") && exm) exm.resp[exm.i] = Object.assign({}, exm.resp[exm.i], {rev: true, ok: a === "acerte"});
         else if (a === "siguiente" && exm) { const p = exm.ps[exm.i], r = exm.resp[exm.i]; if (r === undefined || (p.ty === "es" && (!r || r.ok === undefined))) return; exm.i + 1 >= exm.ps.length ? terminarExamen() : exm.i++; }
         else if (a === "repasar-fallos" && exm && exm.res) { const ids = exm.res.mal; if (!empezarRepaso(null, ids)) vista = "examen"; }
+        else if (a === "ia-cancelar") { if (trab && trab.ctrl) trab.ctrl.abort(); }
+        else if (a === "ia-gen" && cand && !trab) { const ctrl = new AbortController(), mio = cand; trab = {tipo: "gen", txt: "Preparando…", ctrl};
+          generarConIA(mio.texto, {signal: ctrl.signal, onProgreso: (i, k) => { if (trab && trab.ctrl === ctrl) { trab.txt = "Parte " + i + " de " + k + "…"; listo(); } }})
+            .then(r => { trab = null; const ya = new Set(mio.items.map(x => norm(x.t))), nu = r.items.filter(x => !ya.has(norm(x.t))); mio.items = mio.items.concat(nu); msgErr = !!r.error;
+              msg = "La IA propuso " + nu.length + (nu.length === 1 ? " tarjeta nueva" : " tarjetas nuevas") + (nu.some(x => x.rev) ? " (las marcadas con ⚠️ quedaron sin tildar)" : "") + (r.fallidas ? "; " + r.fallidas + (r.fallidas === 1 ? " parte no se pudo leer" : " partes no se pudieron leer") : "") + (r.total > r.partes ? ". El material es largo: usé las primeras " + r.partes + " partes de " + r.total : "") + (r.error ? ". Se cortó: " + r.error : "") + "."; listo(); })
+            .catch(e => { trab = null; msgErr = true; msg = e.message; listo(); }); }
+        else if (a === "ia-corregir" && exm && !trab) { const pq = exm.ps[exm.i], r0 = exm.resp[exm.i], txt = r0 && r0.txt ? r0.txt : "", mio = exm, i = exm.i;
+          if (!txt.trim()) { msgErr = true; msg = "Escribí tu respuesta primero."; } else { const ctrl = new AbortController(); trab = {tipo: "corr", ctrl};
+            corregirConIA(pq.q, pq.resp, txt, {signal: ctrl.signal}).then(v => { trab = null; mio.resp[i] = {txt, rev: true, ok: v.ok, ia: v.expl}; listo(); }).catch(e => { trab = null; msgErr = true; msg = e.message; listo(); }); } }
+        else if (a === "ia-expl" && exm && exm.listo && !trab) { const i = +n.dataset.i, pq = exm.ps[i], mio = exm; if (pq) { const ctrl = new AbortController(); trab = {tipo: "expl", i, ctrl};
+          explicarConIA(pq.ty === "vf" ? pq.q + " (se mostraba: " + pq.mostrar + ")" : pq.q, realResp(pq), textosFallo(pq, mio.resp[i]).mia, {signal: ctrl.signal}).then(t => { trab = null; (mio.expl = mio.expl || {})[i] = t; listo(); }).catch(e => { trab = null; msgErr = true; msg = e.message; listo(); }); } }
         else if (a === "mazo-ren") { const x = mazo(mz), v = x && prompt("Nombre del mazo:", x.n); if (v && v.trim()) { x.n = v.trim().slice(0, 60); guardar(); } }
         else if (a === "mazo-del") { const x = mazo(mz), ts = D().t.filter(t => t.z === mz), grande = ts.length > 150;
           if (x && confirm(grande ? "«" + x.n + "» tiene " + ts.length + " tarjetas: es demasiado grande para la Papelera, así que se borra sin vuelta atrás. ¿Seguro?" : "¿Borrar «" + x.n + "» con sus " + ts.length + " tarjetas? Podés devolverlas desde la Papelera durante 30 días.")) { if (grande) { x._sinPapelera = 1; ts.forEach(t => { t._sinPapelera = 1; }); D().mt.filter(m => m.z === mz).forEach(m => { m._sinPapelera = 1; }); }

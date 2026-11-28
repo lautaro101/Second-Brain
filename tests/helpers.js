@@ -33,6 +33,7 @@ function preparar({datos = {}, extra = {}} = {}) {
   vm.runInContext(leer("core.js"), ctx); ctx.SB.pintar = () => {};   // sin pantalla: repintar no hace nada
   vm.runInContext(leer("sync.js"), ctx);
   vm.runInContext(leer("seguridad.js"), ctx); if (ctx.SB.seg) { ctx.SB.seg.config.iter = 1000; ctx.SB.seg.config.iterPin = 1000; }   // pocas vueltas para que las pruebas vayan rápido
+  vm.runInContext(leer("ia.js"), ctx);
   return {ctx, SB: ctx.SB, ls};
 }
 function cargar(ctx, archivos) {

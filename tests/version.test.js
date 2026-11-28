@@ -21,16 +21,16 @@ test("1.2.0 figura en las novedades y habla de PIN, cifrado y copias", () => {
   const n = ctx.APP_HISTORIAL.find(x => x[0] === "1.2.0"); assert.ok(n); assert.match(n[1], /PIN/); assert.match(n[1], /cifrar/); assert.match(n[1], /copia/);
 });
 test("están todos los archivos de la app y el manifest es válido", () => {
-  for (const f of ["index.html", "version.js", "sw.js", "core.js", "sync.js", "seguridad.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"]) assert.ok(fs.existsSync(path.join(RAIZ, f)), "falta " + f);
+  for (const f of ["index.html", "version.js", "sw.js", "core.js", "sync.js", "seguridad.js", "ia.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"]) assert.ok(fs.existsSync(path.join(RAIZ, f)), "falta " + f);
   assert.ok(JSON.parse(leer("manifest.webmanifest")).name);
 });
 test("el service worker guarda para usar sin conexión cada archivo del núcleo", () => {
-  const sw = leer("sw.js"); ["version.js", "core.js", "sync.js", "seguridad.js"].forEach(f => assert.ok(sw.includes('"./' + f + '"'), f));
+  const sw = leer("sw.js"); ["version.js", "core.js", "sync.js", "seguridad.js", "ia.js"].forEach(f => assert.ok(sw.includes('"./' + f + '"'), f));
 });
 test("el JavaScript de index.html, sw.js, núcleo y módulos no tiene errores de sintaxis", () => {
   const bloques = [...leer("index.html").matchAll(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   bloques.forEach((b, i) => assert.doesNotThrow(() => new vm.Script(b), "bloque " + i));
-  ["sw.js", "core.js", "sync.js", "seguridad.js", ...fs.readdirSync(path.join(RAIZ, "modulos")).map(f => "modulos/" + f)].filter(f => f.endsWith(".js")).forEach(f => assert.doesNotThrow(() => new vm.Script(leer(f)), f));
+  ["sw.js", "core.js", "sync.js", "seguridad.js", "ia.js", ...fs.readdirSync(path.join(RAIZ, "modulos")).map(f => "modulos/" + f)].filter(f => f.endsWith(".js")).forEach(f => assert.doesNotThrow(() => new vm.Script(leer(f)), f));
 });
 
 /* ---- que no vuelvan a desaparecer módulos (pasó en 1.11.2 y 1.11.3) ---- */

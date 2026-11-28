@@ -37,7 +37,7 @@ test("service worker: no atiende pedidos de otra carpeta del mismo dominio", () 
   assert.equal(pedir("https://prueba.test" + MI_CARPETA + "core.js"), true);
 });
 test("almacenamiento: todas las claves de localStorage/sessionStorage y las bases IndexedDB llevan el prefijo de la app", () => {
-  const archivos = ["index.html", "core.js", "sync.js", "seguridad.js", "instalar.js", ...fs.readdirSync(path.join(RAIZ, "modulos")).map(f => "modulos/" + f)];
+  const archivos = ["index.html", "core.js", "sync.js", "seguridad.js", "ia.js", "instalar.js", ...fs.readdirSync(path.join(RAIZ, "modulos")).map(f => "modulos/" + f)];
   const malas = [];
   archivos.forEach(f => {
     const t = leer(f);
@@ -47,7 +47,7 @@ test("almacenamiento: todas las claves de localStorage/sessionStorage y las base
   assert.deepEqual(malas, []);
 });
 test("ningún código borra todo el localStorage ni todas las cachés del dominio", () => {
-  ["index.html", "core.js", "sync.js", "seguridad.js", "instalar.js", "sw.js"].forEach(f => {
+  ["index.html", "core.js", "sync.js", "seguridad.js", "ia.js", "instalar.js", "sw.js"].forEach(f => {
     const t = leer(f);
     assert.doesNotMatch(t, /localStorage\.clear\(|\bLS\.clear\(/, f);
     assert.doesNotMatch(t, /k\.map\(function \(x\) \{ return caches\.delete\(x\)/, f + ": borra todas las cachés del dominio");

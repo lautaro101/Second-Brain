@@ -34,3 +34,10 @@ const COPIA = {tag: "COPIA"};
 test("abrir: con buena señal usa internet", async () => { const {r} = await pedir(RED_OK, COPIA); assert.equal(r.tag, "RED"); });
 test("abrir: sin internet usa la copia guardada al instante", async () => { const {r, ms} = await pedir(() => Promise.reject(new Error("x")), COPIA); assert.equal(r.tag, "COPIA"); assert.ok(ms < 300); });
 test("abrir: con internet colgado no espera más de ~1,5 s", async () => { const {r, ms} = await pedir(() => new Promise(() => {}), COPIA); assert.equal(r.tag, "COPIA"); assert.ok(ms >= 1400 && ms < 2500, "tardó " + ms + " ms"); });
+
+test("el service worker no toca los pedidos a Ollama ni a ningún otro origen, ni los que no son GET", () => {
+  const {manejador} = abrirSW(); ["http://localhost:11434/api/tags", "http://192.168.1.20:11434/api/chat", "https://api.ejemplo.com/x"].forEach(u => {
+    let respondio = false; manejador({request: {method: "GET", url: u, mode: "cors"}, respondWith: () => { respondio = true; }, waitUntil() {}}); assert.equal(respondio, false, u);
+  });
+  let post = false; manejador({request: {method: "POST", url: "https://prueba.test/index.html", mode: "cors"}, respondWith: () => { post = true; }, waitUntil() {}}); assert.equal(post, false);
+});

@@ -11,7 +11,7 @@ test("la versión y las novedades están parejas", () => {
   assert.match(ver, /^\d+\.\d+\.\d+$/); assert.ok(v.includes('["' + ver + '", "' + nov + '"]'), "la primera línea del historial debe ser la versión actual");
 });
 test("index.html carga version.js, lista, núcleo y no incluye módulos a mano", () => {
-  const h = leer("index.html"); ["version.js", "modulos/lista.js", "core.js", "sync.js", "seguridad.js"].forEach(s => assert.ok(h.includes('src="' + s + '"'), s));
+  const h = leer("index.html"); ["version.js", "modulos/lista.js", "core.js", "sync.js", "seguridad.js", "ia.js"].forEach(s => assert.ok(h.includes('src="' + s + '"'), s));
   assert.ok(!/src="modulos\/(notas|tareas|habitos|diario)/.test(h));
 });
 test("index.html abre los datos guardados (iniciar) antes de cargar los módulos", () => {

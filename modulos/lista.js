@@ -1,5 +1,5 @@
 /* Lista de módulos. Para sumar uno: creá modulos/nombre.js (que llame a SB.registrar) y agregalo acá. Lo leen la página y el service worker (para que funcione sin conexión). */
-self.SB_LISTA_VERSION = "1.34.0";   // tiene que ser igual a APP_VERSION de version.js (lo controla la prueba y la app avisa si no coinciden)
+self.SB_LISTA_VERSION = "1.36.0";   // tiene que ser igual a APP_VERSION de version.js (lo controla la prueba y la app avisa si no coinciden)
 self.SB_ARCHIVOS = ["modulos/notas.js", "modulos/tareas.js", "modulos/habitos.js", "modulos/diario.js", "modulos/estudio.js", "modulos/programacion.js", "modulos/finanzas.js", "modulos/colecciones.js", "modulos/entrenamiento.js", "modulos/tarjetas.js", "modulos/lectura.js", "modulos/objetivos.js", "modulos/papelera.js"];
 /* Módulos pensados para después de la 1.0.0 (solo informativo, se ven en Ajustes). */
 self.SB_PARA_DESPUES = [["Salud", "comida y sueño (el entrenamiento ya está)"], ["Idiomas", "inglés a diario: práctica (el vocabulario ya se estudia con Tarjetas)"], ["Relaciones y eventos", "gente, cumpleaños y juntadas"], ["Hogar y mascotas", "tareas de la casa y cuidado de mascotas"]];
